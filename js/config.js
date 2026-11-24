@@ -6,7 +6,7 @@
  * data contoh di browser, tanpa server (cocok untuk mencoba tampilan).
  * ===================================================================== */
 window.APP_CONFIG = {
-  GAS_URL: '',
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbwy0wEniaZH13bbzv79Ng2a_4hp-WzrzBRn4KdpM0vOlRpg6tjMvuLFDL_velEG45O-Nw/exec',
   APP_NAME: 'e-Dose Agora',
   SYNC_INTERVAL_MS: 120000   // sinkron latar tiap 2 menit saat tab aktif
 };
