@@ -29,7 +29,7 @@ var Store = (function () {
   S.writeQueue = function (q) { write(KEY_QUEUE, q); };
 
   S.on = function (fn) { listeners.push(fn); };
-  S.emit = function (reason) { listeners.forEach(function (fn) { try { fn(reason); } catch (e) { console.error(e); } }); };
+  S.emit = function (reason, info) { listeners.forEach(function (fn) { try { fn(reason, info); } catch (e) { console.error(e); } }); };
 
   /* Tambal data lokal dengan baris yang berubah (hasil tulis server/lokal) */
   var KEYS = { config: 'config_key', personnel: 'person_id', energies: 'energy_id', detectors: 'detector_id', kq: 'kq_id', transactions: 'qc_id', notifications: 'log_id' };
@@ -220,7 +220,7 @@ var LocalBackend = (function () {
  * ===================================================================== */
 var Api = (function () {
   var OPTIMISTIC = { hardDelete: 1, saveQC: 1, updateQC: 1, saveAdjustment: 1, saveMaster: 1, deleteMaster: 1, saveKqBulk: 1, renameLinac: 1, saveConfig: 1 };
-  var queue = [], running = false, tempMap = {}, pendingFullSync = false, wake = null;
+  var queue = [], running = false, tempMap = {}, pendingFullSync = false, wake = null, authBlocked = false;
   function isDemo() { return !window.APP_CONFIG || !APP_CONFIG.GAS_URL || /XXXX/.test(APP_CONFIG.GAS_URL); }
 
   async function raw(action, data, timeoutMs) {
@@ -255,7 +255,9 @@ var Api = (function () {
     var r = await raw('login', { username: username, password: password, remember: remember });
     if (r.success) {
       Store.setAuth({ token: r.token, user: r.user, expiresAt: r.expiresAt });
-      Store.data = r.data; Store.version = r.version; Store.lastSync = Date.now(); Store.persist();
+      if (queue.length && Store.data) pendingFullSync = true;     /* simpan dulu antrean, sinkron penuh setelahnya */
+      else { Store.data = r.data; Store.version = r.version; }
+      Store.lastSync = Date.now(); Store.persist();
     }
     return r;
   }
@@ -340,6 +342,10 @@ var Api = (function () {
         await new Promise(function (r) { wake = r; setTimeout(r, Math.min(30000, 1500 * op.tries)); });
         wake = null; continue;
       }
+      if (res.code === 'AUTH') {
+        /* sesi habis: JANGAN batalkan — data tetap antre, terkirim otomatis setelah login ulang */
+        authBlocked = true; running = false; Store.emit('syncstate'); return;
+      }
       queue.shift(); persistQueue();
       if (res.success) {
         /* petakan ID sementara → ID final */
@@ -367,6 +373,7 @@ var Api = (function () {
   /* Antrean tersisa dari sesi sebelumnya (tab ditutup sebelum terkirim) */
   function resumeQueue() {
     if (isDemo()) return;
+    if (queue.length) { authBlocked = false; pump(); return; }   /* antrean di memori masih ada (login ulang tanpa reload) */
     var q = Store.readQueue();
     if (!q.length) return;
     Store.writeQueue([]);
@@ -381,5 +388,5 @@ var Api = (function () {
   /* koneksi kembali → coba kirim antrean segera */
   window.addEventListener('online', function () { if (wake) wake(); });
   return { isDemo: isDemo, raw: raw, login: login, sync: sync, mutate: mutate, resumeQueue: resumeQueue, retryNow: function () { if (wake) wake(); },
-    pending: function () { return queue.length; }, resolveId: function (id) { return tempMap[id] || id; } };
+    pending: function () { return queue.length; }, authBlocked: function () { return authBlocked; }, resolveId: function (id) { return tempMap[id] || id; } };
 })();

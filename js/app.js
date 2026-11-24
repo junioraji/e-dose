@@ -107,6 +107,7 @@ var App = (function () {
   function renderSync() {
     var el = document.getElementById('sync-ind'), q = Api.pending();
     if (Api.isDemo()) { el.className = 'sync demo-pill'; el.innerHTML = UI.icon('beaker') + '<span class="lbl">Mode Demo</span>'; el.title = 'Data lokal di browser — isi GAS_URL di js/config.js untuk terhubung ke server'; return; }
+    if (Api.authBlocked() && q) { el.className = 'sync off'; el.innerHTML = UI.icon('lock') + '<span class="lbl">Login ulang · ' + q + ' antre</span>'; el.title = 'Sesi berakhir. Data belum hilang — login ulang untuk mengirim.'; return; }
     if (!Store.online) { el.className = 'sync off'; el.innerHTML = UI.icon('cloudOff') + '<span class="lbl">Offline' + (q ? ' · ' + q + ' antre' : '') + '</span>'; el.title = 'Tidak terhubung ke server. Perubahan disimpan dan dikirim otomatis.'; return; }
     if (q || Store.syncing) { el.className = 'sync busy'; el.innerHTML = '<span class="spin" style="width:12px;height:12px"></span><span class="lbl">' + (q ? 'Menyimpan ' + q + '…' : 'Sinkron…') + '</span>'; el.title = ''; return; }
     el.className = 'sync ok'; el.innerHTML = UI.icon('cloud') + '<span class="lbl">Tersinkron</span>';
@@ -162,7 +163,7 @@ var App = (function () {
     if (!Store.data) return;
     var page = Pages[current.name];
     if (reason === 'rejected') {
-      var msg = (info && info.res && info.res.message) || 'Perubahan ditolak server.';
+      var msg = (info && info.res && info.res.message) || 'Perubahan ditolak server (tanpa keterangan).';
       var op = info && info.op, lr = op && op.local && op.local.record;
       var restore = op && op.action === 'saveQC';
       if (restore) { try { var last = sessionStorage.getItem('edose_last_submit'); if (last) sessionStorage.setItem('edose_draft_input', last); } catch (e) { } }
@@ -201,7 +202,7 @@ var App = (function () {
   function onAuthExpired() {
     Store.setAuth(null);
     document.documentElement.classList.remove('has-auth');
-    UI.toast('Sesi berakhir. Silakan login kembali — data lokal tetap aman.', 'warning');
+    UI.toast('Sesi berakhir. Silakan login kembali — ' + (Api.pending() ? Api.pending() + ' data yang belum terkirim tetap aman dan akan dikirim setelah login.' : 'data lokal tetap aman.'), 'warning', { sticky: !!Api.pending() });
   }
 
   function showLoginHints() {
