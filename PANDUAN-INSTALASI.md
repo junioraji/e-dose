@@ -111,7 +111,7 @@ Login dengan `admin` + password dari log, lalu:
 4. **Pengaturan → Notifikasi Email** — isi email penerima, klik **Pakai URL ini** untuk URL aplikasi, lalu **Kirim Email Uji**.
 5. **Pesawat Linac & Energi** — ganti pesawat contoh: TPR20,10 / R50, z_ref, PDD(z_ref) atau TMR(z_ref), baseline output, k_pol & k_s tersimpan.
 6. **Detektor & Tabel kQ → Daftar Detektor** — chamber & elektrometer Anda: N_D,w (cGy/nC atau Gy/C), k_elec, sertifikat, tanggal kedaluwarsa.
-7. **Detektor & Tabel kQ → Tabel Referensi kQ** — ⚠️ **ganti seluruh nilai CONTOH** dengan nilai resmi IAEA TRS-398 (Tabel 14 foton, Tabel 18 elektron) untuk model chamber Anda. Gunakan **Tempel Tabel** untuk menyalin dua kolom sekaligus. Nama model harus sama persis dengan nama di Daftar Detektor.
+7. **Detektor & Tabel kQ → Tabel Referensi kQ** — sudah berisi data resmi **IAEA TRS-398 Rev. 1** (Pers. 34/Tabel 45 foton, Tabel 20 elektron). Pastikan chamber Anda bertanda ✓ Foton/Elektron di Daftar Detektor. Bila punya kQ terukur dari SSDL, masukkan lewat **Tempel Tabel** — data Anda menggantikan nilai generik untuk chamber itu.
 8. **Pengaturan → Kebijakan Toleransi** — default Warning ±1.0%, Action ±2.0%, T₀ 20 °C, P₀ 101.325 kPa.
 
 ### Verifikasi kriteria penerimaan PRD (§8)
@@ -151,6 +151,15 @@ Data di Google Sheets **tidak perlu diubah dan setup TIDAK dijalankan ulang**.
    git push
    ```
    Versi file sudah dinaikkan (`?v=1.1.0`), jadi browser otomatis memuat versi baru.
+
+### Perubahan v1.2 — data resmi IAEA TRS-398 Rev. 1 (2024)
+- **k_Q foton**: Pers. (34) dengan konstanta a, b Tabel 45 untuk 26 tipe chamber — nilai pas pada TPR20,10 berapa pun (mereproduksi Tabel 16 dalam ±0.0001), rentang 0.56–0.82.
+- **k_Q elektron**: Tabel 20 (8 chamber) dengan interpolasi linier; chamber silindris hanya untuk R50 ≥ 3 g/cm² (Tabel 19).
+- **k_s**: Tabel 10 + Pers. (13); rasio V1/V2 di luar tabel memakai Pers. (14). Peringatan bila V1/V2 < 3.
+- **k_vol (baru)** untuk berkas FFF: Pers. (22) dari panjang rongga chamber (Tabel 4) dan SDD, atau nilai dari profil terukur. Masuk ke M_Q.
+- **Pustaka chamber** (Tabel 4, 5, 45) untuk mengisi otomatis model, tipe & panjang rongga di Master Detektor; nama model dicocokkan toleran ("PTW 30013" = "PTW 30013 Farmer").
+- **Migrasi otomatis** database lama: baris kQ "CONTOH" diganti data Rev. 1; baris kQ yang Anda isi sendiri (mis. sertifikat SSDL) dipertahankan; energi berlabel FFF ditandai; panjang rongga chamber yang dikenal diisi.
+- Kartu k_pol & k_s di Input QC kini simetris dan sejajar per baris.
 
 ### Perubahan v1.1
 - Hapus permanen untuk personel, detektor, energi & pesawat yang **belum pernah dipakai** di pengukuran (yang sudah dipakai tetap hanya bisa dinonaktifkan agar riwayat & laporan utuh).

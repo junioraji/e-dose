@@ -11,13 +11,14 @@ var MeasUI = (function () {
   function blankMeas(en) {
     en = en || {};
     return { temp_c: '', press: '', pUnit: 'kPa', mu_set: 100, readings: ['', '', ''], kpol_mode: 'stored', k_pol: en.kpol_default || 1, ks_mode: 'stored', k_s: en.ks_default || 1,
-      minus: ['', '', ''], v2r: ['', '', ''], v1: 400, v2: 200, notes: '', qc_datetime: UI.nowLocalInput() };
+      minus: ['', '', ''], v2r: ['', '', ''], v1: 400, v2: 200, kvol_mode: 'eq22', k_vol: '', notes: '', qc_datetime: UI.nowLocalInput() };
   }
   function fromRecord(r) {
     var num = function (v) { return OK(N(v)) ? [String(v)] : []; };
     return { temp_c: r.temp_c, press: r.press_kpa, pUnit: 'kPa', mu_set: r.mu_set, readings: three(r.m_raw_list), kpol_mode: r.kpol_mode || 'stored', k_pol: r.k_pol,
       ks_mode: r.ks_mode || 'stored', k_s: r.k_s, minus: three((r.m_minus_list && r.m_minus_list.length) ? r.m_minus_list : num(r.m_minus)),
       v2r: three((r.m_v2_list && r.m_v2_list.length) ? r.m_v2_list : num(r.m_v2)), v1: r.v1 || 400, v2: r.v2 || 200, notes: r.notes || '',
+      kvol_mode: r.kvol_mode === 'manual' ? 'manual' : 'eq22', k_vol: r.kvol_mode === 'manual' ? r.k_vol : '', kvol_orig: r.kvol_mode === 'manual' ? 'manual' : 'eq22',
       qc_datetime: String(r.qc_datetime).slice(0, 16), fismed_id: r.fismed_id };
   }
   function nums(l) { return (l || []).map(N).filter(OK); }
@@ -27,6 +28,9 @@ var MeasUI = (function () {
     var r = { qc_datetime: s.qc_datetime, temp_c: N(s.temp_c), press_kpa: OK(kpa) ? Math.round(kpa * 10000) / 10000 : '', mu_set: N(s.mu_set),
       m_raw_list: nums(s.readings), kpol_mode: s.kpol_mode, ks_mode: s.ks_mode, notes: s.notes || '', fismed_id: s.fismed_id };
     if (s.kpol_mode === 'measured') { r.m_minus_list = nums(s.minus); r.k_pol = ''; } else { r.k_pol = N(s.k_pol); r.m_minus_list = []; r.m_plus = ''; r.m_minus = ''; }
+    /* k_vol hanya dikirim bila manual atau mode diubah — koreksi data tidak mencatat perubahan palsu */
+    if (s.kvol_mode === 'manual') { r.kvol_mode = 'manual'; r.k_vol = N(s.k_vol); }
+    else if (s.kvol_orig === 'manual') { r.kvol_mode = 'eq22'; r.k_vol = ''; }
     if (s.ks_mode === 'measured') { r.m_v2_list = nums(s.v2r); r.v1 = N(s.v1); r.v2 = N(s.v2); r.k_s = ''; } else { r.k_s = N(s.k_s); r.m_v2_list = []; r.m_v1 = ''; r.m_v2 = ''; r.v1 = ''; r.v2 = ''; }
     return r;
   }
@@ -43,34 +47,65 @@ var MeasUI = (function () {
   function listBlock(s, key, label, avgId, avgLabel) {
     var rd = s[key] && s[key].length ? s[key] : (s[key] = ['', '', '']);
     return '<div class="readings">' + rd.map(function (v, i) {
-      return '<label class="field reading"><span>' + label + ' #' + (i + 1) + ' (nC)</span><input name="' + key + '_' + i + '" data-list="' + key + '" data-idx="' + i + '" type="number" step="0.001" inputmode="decimal" value="' + esc(v) + '" placeholder="0.000">' +
-        (rd.length > 1 ? '<button type="button" class="rm" tabindex="-1" data-rm="' + key + ':' + i + '" aria-label="Hapus ' + label + ' #' + (i + 1) + '">' + UI.icon('x', 'ic-xs', 2) + '</button>' : '') + '</label>';
+      return '<label class="field"><span>' + label + ' #' + (i + 1) + ' (nC)</span><input name="' + key + '_' + i + '" data-list="' + key + '" data-idx="' + i + '" type="number" step="0.001" inputmode="decimal" value="' + esc(v) + '" placeholder="0.000"></label>';
     }).join('') + '<div class="field"><span style="color:var(--info-text)">' + avgLabel + '</span><div class="calc-out" id="' + avgId + '">—</div></div></div>' +
-      '<div class="row-between" style="margin-top:6px"><span class="small muted" id="' + avgId + '-n"></span>' + (rd.length < 5 ? '<button type="button" class="btn btn-text label" tabindex="-1" data-add="' + key + '">' + UI.icon('plus', 'ic-xs', 2) + ' Tambah ulangan (maks. 5)</button>' : '') + '</div>';
+      '<div class="row-between" style="margin-top:6px"><span class="small muted" id="' + avgId + '-n"></span>' + repButtons(key, rd.length) + '</div>';
   }
-
   function readingsBlock(s) {
     return listBlock(s, 'readings', 'M', 'm-avg', 'Rata-rata M_raw') +
       '<p class="small muted" style="margin:6px 0 0">Polaritas normal (+) &amp; tegangan kerja V1. Rata-rata ini juga dipakai sebagai <b>M+</b> (k_pol) dan <b>M1</b> (k_s).</p>';
   }
 
+  /* Daftar ulangan ringkas untuk kartu faktor: 3 kolom + baris rata-rata selebar kartu */
+  function repButtons(key, n) {
+    return '<div class="rep-btns">' + (n < 5 ? '<button type="button" class="btn btn-text label" tabindex="-1" data-add="' + key + '">' + UI.icon('plus', 'ic-xs', 2) + ' Tambah ulangan</button>' : '<span class="small muted">Maks. 5 ulangan</span>') +
+      (n > 1 ? '<button type="button" class="btn btn-text label rm-last" tabindex="-1" data-rm="' + key + ':' + (n - 1) + '">' + UI.icon('x', 'ic-xs', 2) + ' Kurangi</button>' : '') + '</div>';
+  }
+  function miniList(s, key, label, avgId, avgLabel) {
+    var rd = s[key] && s[key].length ? s[key] : (s[key] = ['', '', '']);
+    return '<div class="mini-list">' + rd.map(function (v, i) {
+      return '<label class="field"><span>' + label + ' #' + (i + 1) + '</span><input name="' + key + '_' + i + '" data-list="' + key + '" data-idx="' + i + '" type="number" step="0.001" inputmode="decimal" value="' + esc(v) + '" placeholder="0.000"></label>';
+    }).join('') + '</div>' +
+      '<div class="auto-row avg"><span>' + avgLabel + ' <small id="' + avgId + '-n"></small></span><b class="mono" id="' + avgId + '">—</b></div>' + repButtons(key, rd.length);
+  }
+
+  /* Kartu k_pol & k_s — 5 baris sejajar (CSS subgrid): judul · nilai acuan · parameter · ulangan · hasil */
   function factorsBlock(s) {
     var pol = s.kpol_mode === 'measured', rec = s.ks_mode === 'measured';
-    return '<div class="factors">' +
-      '<div class="factor-box"><div class="row-between"><div><div class="label">Polaritas — k_pol</div><div class="small muted">' + (pol ? '(|M+| + |M−|) / 2|M+|' : 'Nilai tersimpan dari Master Energi') + '</div></div>' +
-      '<div class="seg sm"><button type="button" tabindex="-1" data-kpolmode="stored" class="' + (!pol ? 'on' : '') + '">Tersimpan</button><button type="button" tabindex="-1" data-kpolmode="measured" class="' + (pol ? 'on' : '') + '">Ukur</button></div></div>' +
+    function head(title, sub, attr, measured) {
+      return '<div class="fb-head"><div class="label">' + title + '</div><div class="small muted fb-sub">' + sub + '</div>' +
+        '<div class="seg sm fb-seg"><button type="button" tabindex="-1" ' + attr + '="stored" class="' + (!measured ? 'on' : '') + '">Tersimpan</button><button type="button" tabindex="-1" ' + attr + '="measured" class="' + (measured ? 'on' : '') + '">Ukur</button></div></div>';
+    }
+    var kpolCard = '<div class="factor-box">' +
+      head('Polaritas — k_pol', pol ? 'Pers. (11): (|M+| + |M−|) / 2|M+|' : 'Nilai tersimpan (Master Energi)', 'data-kpolmode', pol) +
       (pol ? '<div class="auto-row"><span>M+ = rata-rata bacaan rutin</span><b class="mono" id="mplus-auto">—</b></div>' +
-        '<div class="sub-lbl">Ulangan polaritas terbalik (−), MU sama</div>' + listBlock(s, 'minus', 'M−', 'minus-avg', 'Rata-rata |M−|')
-        : '<label class="field mt"><span>k_pol</span><input name="k_pol" type="number" step="0.0001" value="' + esc(s.k_pol) + '"></label>') +
-      '<div class="factor-res"><span>k_pol</span><b class="mono" id="kpol-out">—</b></div></div>' +
-      '<div class="factor-box"><div class="row-between"><div><div class="label">Rekombinasi — k_s</div><div class="small muted">' + (rec ? 'Dua tegangan, berkas pulsa (TRS-398)' : 'Nilai tersimpan dari Master Energi') + '</div></div>' +
-      '<div class="seg sm"><button type="button" tabindex="-1" data-ksmode="stored" class="' + (!rec ? 'on' : '') + '">Tersimpan</button><button type="button" tabindex="-1" data-ksmode="measured" class="' + (rec ? 'on' : '') + '">Ukur</button></div></div>' +
-      (rec ? '<div class="g g-3 g-gap-sm mt"><label class="field"><span>V1 (V)</span><input name="v1" type="number" step="1" value="' + esc(s.v1) + '"></label><label class="field"><span>V2 (V)</span><input name="v2" type="number" step="1" value="' + esc(s.v2) + '"></label>' +
-        '<div class="field"><span>V1/V2</span><div class="calc-out" id="vratio">—</div></div></div>' +
-        '<div class="auto-row"><span>M1 = rata-rata bacaan rutin (V1)</span><b class="mono" id="m1-auto">—</b></div>' +
-        '<div class="sub-lbl">Ulangan pada tegangan rendah V2</div>' + listBlock(s, 'v2r', 'M2', 'v2r-avg', 'Rata-rata M2')
-        : '<label class="field mt"><span>k_s</span><input name="k_s" type="number" step="0.0001" value="' + esc(s.k_s) + '"></label>') +
-      '<div class="factor-res"><span>k_s</span><b class="mono" id="ks-out">—</b></div></div></div>';
+          '<div class="fb-param"><div class="fb-note">' + UI.icon('alert', 'ic-xs') + ' Balik polaritas ke (−); tegangan V1 &amp; MU sama dengan bacaan rutin.</div></div>' +
+          '<div class="fb-list"><div class="sub-lbl">Ulangan polaritas terbalik (−)</div>' + miniList(s, 'minus', 'M−', 'minus-avg', 'Rata-rata |M−|') + '</div>'
+        : '<label class="field"><span>k_pol</span><input name="k_pol" type="number" step="0.0001" value="' + esc(s.k_pol) + '"></label><div></div><div></div>') +
+      '<div class="factor-res"><span>k_pol</span><b class="mono" id="kpol-out">—</b></div></div>';
+    var ksCard = '<div class="factor-box">' +
+      head('Rekombinasi — k_s', rec ? 'Dua tegangan, berkas pulsa (Tabel 10)' : 'Nilai tersimpan (Master Energi)', 'data-ksmode', rec) +
+      (rec ? '<div class="auto-row"><span>M1 = rata-rata bacaan rutin (V1)</span><b class="mono" id="m1-auto">—</b></div>' +
+          '<div class="fb-param"><div class="g g-3 g-gap-sm"><label class="field"><span>V1 (V)</span><input name="v1" type="number" step="1" value="' + esc(s.v1) + '"></label>' +
+          '<label class="field"><span>V2 (V)</span><input name="v2" type="number" step="1" value="' + esc(s.v2) + '"></label>' +
+          '<div class="field"><span>V1/V2</span><div class="calc-out" id="vratio">—</div></div></div><div class="small muted" id="ks-method" style="margin-top:4px"></div></div>' +
+          '<div class="fb-list"><div class="sub-lbl">Ulangan pada tegangan rendah V2</div>' + miniList(s, 'v2r', 'M2', 'v2r-avg', 'Rata-rata M2') + '</div>'
+        : '<label class="field"><span>k_s</span><input name="k_s" type="number" step="0.0001" value="' + esc(s.k_s) + '"></label><div></div><div></div>') +
+      '<div class="factor-res"><span>k_s</span><b class="mono" id="ks-out">—</b></div></div>';
+    return '<div class="factors">' + kpolCard + ksCard + '</div>';
+  }
+
+  /* Kartu k_vol — hanya berkas FFF (Bagian 4.4.3.5, Pers. 22) */
+  function kvolBlock(s, info) {
+    var man = s.kvol_mode === 'manual';
+    return '<div class="factor-box kvol-box"><div class="fb-head"><div><div class="label">Volume averaging — k_vol (berkas FFF)</div><div class="small muted">' +
+      (man ? 'Dari profil lateral terukur (dianjurkan TRS-398)' : 'Generik Pers. (22): 1 + (0.0062·TPR − 0.0036)·(100·L/SDD)²') + '</div></div>' +
+      '<div class="seg sm"><button type="button" tabindex="-1" data-kvolmode="eq22" class="' + (!man ? 'on' : '') + '">Pers. (22)</button><button type="button" tabindex="-1" data-kvolmode="manual" class="' + (man ? 'on' : '') + '">Profil terukur</button></div></div>' +
+      (man ? '<div class="g g-3 g-gap-sm mt"><label class="field"><span>k_vol</span><input name="k_vol" type="number" step="0.0001" value="' + esc(s.k_vol) + '" placeholder="1.0000"></label></div>'
+        : '<div class="g g-3 g-gap-sm mt"><div class="field"><span>L rongga chamber</span><div class="calc-out">' + (OK(info.L) ? info.L.toFixed(2) + ' cm' : '<span class="t-warning small">isi di Master Detektor</span>') + '</div></div>' +
+          '<div class="field"><span>SDD</span><div class="calc-out">' + (OK(info.sdd) ? info.sdd.toFixed(1) + ' cm' : '—') + '</div></div>' +
+          '<div class="field"><span>TPR20,10</span><div class="calc-out">' + (OK(info.tpr) ? info.tpr.toFixed(3) : '—') + '</div></div></div>') +
+      '<div class="factor-res"><span>k_vol</span><b class="mono" id="kvol-out">—</b></div></div>';
   }
 
   /* Ikat input generik ke state; Enter = pindah ke kolom berikutnya */
@@ -98,6 +133,7 @@ var MeasUI = (function () {
       else if (b.dataset.rm) { var p = b.dataset.rm.split(':'); s[p[0]].splice(+p[1], 1); onStructural(); }
       else if (b.dataset.kpolmode) { s.kpol_mode = b.dataset.kpolmode; onStructural(s.kpol_mode === 'measured' ? 'minus_0' : 'k_pol'); }
       else if (b.dataset.ksmode) { s.ks_mode = b.dataset.ksmode; onStructural(s.ks_mode === 'measured' ? 'v2r_0' : 'k_s'); }
+      else if (b.dataset.kvolmode) { s.kvol_mode = b.dataset.kvolmode; onStructural(s.kvol_mode === 'manual' ? 'k_vol' : ''); }
     });
   }
 
@@ -116,6 +152,8 @@ var MeasUI = (function () {
     if (s) set('#vratio', OK(N(s.v1) / N(s.v2)) ? (N(s.v1) / N(s.v2)).toFixed(2) : '—');
     set('#kpol-out', OK(r.kpol) ? r.kpol.toFixed(4) : '—');
     set('#ks-out', OK(r.ks) ? r.ks.toFixed(4) : '—');
+    set('#kvol-out', OK(r.kvol) ? r.kvol.toFixed(4) : '—');
+    set('#ks-method', r.ksInfo && r.ksInfo.method ? 'Metode: ' + r.ksInfo.method : '');
     set('#ktp-out', OK(r.ktp) ? r.ktp.toFixed(4) : '—');
   }
 
@@ -143,7 +181,7 @@ var MeasUI = (function () {
     return out;
   }
 
-  return { blankMeas: blankMeas, fromRecord: fromRecord, toRecord: toRecord, envFields: envFields, readingsBlock: readingsBlock, factorsBlock: factorsBlock,
+  return { kvolBlock: kvolBlock, blankMeas: blankMeas, fromRecord: fromRecord, toRecord: toRecord, envFields: envFields, readingsBlock: readingsBlock, factorsBlock: factorsBlock,
     bind: bind, updateLiveBits: updateLiveBits, stCls: stCls, statusLabel: statusLabel, issues: issues, instrumentIssues: instrumentIssues };
 })();
 
@@ -215,7 +253,8 @@ var MeasUI = (function () {
 
   function telemetry(rc) {
     var en = Data.E()[S.energy_id] || {}, ch = Data.DET()[S.chamber_id] || {}, el = Data.DET()[S.electrometer_id] || {}, inp = rc.input, r = rc.result;
-    var kqInfo = r.kqInfo && r.kqInfo.lo && !r.kqInfo.exact ? 'interpolasi ' + r.kqInfo.lo.x + '–' + r.kqInfo.hi.x : r.kqInfo && r.kqInfo.exact ? 'nilai tabel' : inp.snapshot ? 'snapshot record' : '';
+    var ki = r.kqInfo || {};
+    var kqInfo = inp.snapshot ? 'snapshot record' : ki.method === 'EQ34' ? 'Pers. (34), a=' + ki.a + ' b=' + ki.b : ki.lo && !ki.exact ? 'Tabel 20, interpolasi ' + ki.lo.x + '–' + ki.hi.x : ki.exact ? 'nilai tabel' : '';
     function t(k, v, sub) { return '<div><div class="k">' + k + '</div><div class="v">' + v + '</div>' + (sub ? '<div class="small muted">' + sub + '</div>' : '') + '</div>'; }
     return '<div class="telemetry"><div class="row-between" style="margin-bottom:8px"><span class="label" style="color:var(--info-text)">' + UI.icon('lock', 'ic-xs', 2) + ' Parameter Referensi Terkunci</span><span class="label" style="color:var(--info-text)">' + (inp.snapshot ? 'Snapshot saat pengukuran' : 'Auto-filled dari Master Data') + '</span></div>' +
       '<div class="g g-4 g-gap-sm">' +
@@ -241,7 +280,7 @@ var MeasUI = (function () {
       '<div class="small" style="margin-top:4px">' + (st === 'FAIL' ? 'Melebihi Action Level (±' + r.action.toFixed(2) + '%)' : st === 'WARNING' ? 'Di antara Warning (±' + r.warn.toFixed(2) + '%) dan Action (±' + r.action.toFixed(2) + '%)' : st === 'PASS' ? 'Dalam batas Warning (±' + r.warn.toFixed(2) + '%)' : 'Isi suhu, tekanan & bacaan elektrometer') + '</div></div>' +
       '<div class="kv">' +
       '<div><span class="k">Faktor k_TP</span><span class="v" id="ktp-out">' + UI.f(r.ktp, 4) + '</span></div>' +
-      '<div><span class="k">k_s × k_pol × k_elec</span><span class="v">' + UI.f(r.ks * r.kpol * r.kelec, 4) + '</span></div>' +
+      '<div><span class="k">k_s × k_pol × k_elec' + (rc.input.fff ? ' × k_vol' : '') + '</span><span class="v">' + UI.f(r.ks * r.kpol * r.kelec * (r.kvol || 1), 4) + '</span></div>' +
       '<div><span class="k">Bacaan Terkoreksi M_Q</span><span class="v">' + (OK(r.mq) ? r.mq.toFixed(3) + ' nC' : '—') + '</span></div>' +
       '<div><span class="k">Dosis D_w,Q (z_ref)</span><span class="v">' + (OK(r.dwZref) ? r.dwZref.toFixed(3) + ' cGy' : '—') + '</span></div>' +
       '<div><span class="k">Dosis D_w,Q (z_max)</span><span class="v">' + (OK(r.dwZmax) ? r.dwZmax.toFixed(3) + ' cGy' : '—') + '</span></div>' +
@@ -279,7 +318,8 @@ var MeasUI = (function () {
       '</div>' + telemetry(rc) + '</section>' +
       '<section class="card"><div class="sec-hd"><span class="step">3</span><h2 class="h-sm">Kondisi Lingkungan</h2></div><div class="g g-3">' + MeasUI.envFields(S) + '</div></section>' +
       '<section class="card"><div class="sec-hd"><span class="step">4</span><h2 class="h-sm">Bacaan Elektrometer Rutin</h2></div>' + MeasUI.readingsBlock(S) + '</section>' +
-      '<section class="card"><div class="sec-hd"><span class="step">5</span><h2 class="h-sm">Faktor Koreksi Polaritas &amp; Rekombinasi</h2></div>' + MeasUI.factorsBlock(S) +
+      '<section class="card"><div class="sec-hd"><span class="step">5</span><h2 class="h-sm">Faktor Koreksi ' + (rc.input.fff ? 'Polaritas, Rekombinasi &amp; Volume Averaging' : 'Polaritas &amp; Rekombinasi') + '</h2></div>' + MeasUI.factorsBlock(S) +
+      (rc.input.fff ? '<div class="mt">' + MeasUI.kvolBlock(S, { L: N(rc.input.cavityLengthCm), sdd: rc.input.sdd, tpr: N(rc.input.qualityIndex) }) + '</div>' : '') +
       '<label class="field mt"><span>Catatan Fisikawan Medis</span><textarea name="notes" rows="2" placeholder="Tambahkan catatan kondisi berkas atau lingkungan...">' + esc(S.notes) + '</textarea></label></section>' +
       (isAdj ? '<section class="card"><div class="sec-hd"><span class="step">6</span><h2 class="h-sm">Log Tindakan Adjustment</h2></div><div class="g g-2">' +
         '<label class="field"><span>Waktu Koreksi</span><input name="adj_datetime" type="datetime-local" value="' + esc(S.adj_datetime) + '"></label>' +

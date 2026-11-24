@@ -62,6 +62,7 @@ window.FormModal = function (o) {
     { name: 'pdd_zref', label: 'PDD(z_ref)', type: 'number', step: '0.01', hint: '% — untuk setup SSD' },
     { name: 'tmr_zref', label: 'TMR(z_ref)', type: 'number', step: '0.0001', hint: 'untuk setup SAD' },
     { name: 'baseline_cgy_mu', label: 'Baseline Output', type: 'number', step: '0.001', req: true, def: 1.000, hint: 'cGy/MU di z_max' },
+    { name: 'is_fff', label: 'Berkas FFF (tanpa flattening filter) — terapkan k_vol', type: 'checkbox', span: true },
     { name: 'kpol_default', label: 'k_pol tersimpan', type: 'number', step: '0.0001', def: 1.000 },
     { name: 'ks_default', label: 'k_s tersimpan', type: 'number', step: '0.0001', def: 1.000 }
   ];
@@ -74,12 +75,13 @@ window.FormModal = function (o) {
       var bt = form.querySelector('[name=beam_type]').value, setup = form.querySelector('[name=setup_type]').value;
       form.querySelector('[data-f=pdd_zref]').classList.toggle('hidden', setup !== 'SSD');
       form.querySelector('[data-f=tmr_zref]').classList.toggle('hidden', setup !== 'SAD');
+      var ff = form.querySelector('[name=is_fff]'); if (ff) { ff.closest('label').classList.toggle('hidden', bt !== 'PHOTON'); if (bt !== 'PHOTON') ff.checked = false; }
       form.querySelector('[data-f=quality_index] > span').innerHTML = (bt === 'ELECTRON' ? 'R50 (cm)' : 'TPR20,10') + ' <b class="req">*</b>';
       var hint = form.querySelector('#zref-hint');
       if (hint) hint.remove();
       var q = N(form.querySelector('[name=quality_index]').value);
       var zr = form.querySelector('[data-f=z_ref_cm]');
-      var txt = bt === 'ELECTRON' ? (TRS398.ok(q) ? 'TRS-398: z_ref = 0.6·R50 − 0.1 = <b class="mono">' + (0.6 * q - 0.1).toFixed(2) + ' cm</b> <button type="button" class="btn-text label" id="zref-apply">Pakai</button>' : 'TRS-398: z_ref = 0.6·R50 − 0.1 cm') : 'TRS-398 foton: z_ref = 10 g/cm² (5 cm bila TPR < 0.7 boleh)';
+      var txt = bt === 'ELECTRON' ? (TRS398.ok(q) ? 'Pers. (39): z_ref = 0.6·R50 − 0.1 = <b class="mono">' + (0.6 * q - 0.1).toFixed(2) + ' g/cm²</b> <button type="button" class="btn-text label" id="zref-apply">Pakai</button>' + (q < 3 ? ' · R50 &lt; 3 → wajib chamber plan-paralel (Tabel 19)' : '') : 'Pers. (39): z_ref = 0.6·R50 − 0.1 g/cm²') : 'Tabel 15 Rev. 1: z_ref = 10 g/cm², SSD/SAD 100 cm, lapangan 10×10 cm², chamber silindris';
       zr.insertAdjacentHTML('beforeend', '<span class="hint" id="zref-hint">' + txt + '</span>');
     }
     /* delegasi: tombol "Pakai" dibuat ulang saat input kehilangan fokus */
@@ -99,6 +101,7 @@ window.FormModal = function (o) {
       onSave: function (d) {
         d.linac_id = linac.linac_id; d.linac_name = linac.linac_name; d.linac_model = linac.linac_model; d.serial_no = linac.serial_no; d.bunker = linac.bunker;
         if (d.is_active === undefined) d.is_active = true;
+        if (d.beam_type !== 'PHOTON') d.is_fff = false;
         return Api.mutate('saveMaster', { entity: 'energies', row: d });
       }, okToast: 'Data energi disimpan.'
     });
@@ -122,7 +125,7 @@ window.FormModal = function (o) {
       (ens.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Modalitas</th><th>Energi</th><th>Setup</th><th class="r">Baseline</th><th class="r">TPR20,10 / R50</th><th class="r">PDD / TMR</th><th class="r">z_ref</th><th class="r">k_pol · k_s</th><th class="r">Aksi</th></tr></thead><tbody>' +
         ens.map(function (e) {
           return '<tr class="' + (e.is_active ? '' : 'row-off') + '"><td><span class="badge ' + (e.beam_type === 'ELECTRON' ? 'b-cleared' : 'b-info') + ' b-sm">' + (e.beam_type === 'ELECTRON' ? 'Electron' : 'Photon') + '</span></td>' +
-            '<td style="font-weight:700;color:var(--primary)">' + esc(e.energy_label) + (e.is_active ? '' : ' <span class="small muted">(nonaktif)</span>') + '</td><td class="mono">' + esc(e.setup_type) + ' ' + UI.f(e.ssd_sad_cm, 0) + '</td>' +
+            '<td style="font-weight:700;color:var(--primary)">' + esc(e.energy_label) + (AppModel.isFff(e) ? ' <span class="badge b-warning b-sm">FFF · k_vol</span>' : '') + (e.is_active ? '' : ' <span class="small muted">(nonaktif)</span>') + '</td><td class="mono">' + esc(e.setup_type) + ' ' + UI.f(e.ssd_sad_cm, 0) + '</td>' +
             '<td class="r mono">' + UI.f(e.baseline_cgy_mu, 3) + '</td><td class="r mono">' + (e.beam_type === 'ELECTRON' ? UI.f(e.quality_index, 2) + ' cm' : UI.f(e.quality_index, 3)) + '</td>' +
             '<td class="r mono">' + (e.setup_type === 'SAD' ? UI.f(e.tmr_zref, 4) : UI.f(e.pdd_zref, 2) + '%') + '</td><td class="r mono">' + UI.f(e.z_ref_cm, 2) + '</td><td class="r mono small">' + UI.f(e.kpol_default, 4) + ' · ' + UI.f(e.ks_default, 4) + '</td>' +
             '<td class="r"><span class="acts"><button class="icon-btn" data-edit-e="' + esc(e.energy_id) + '" aria-label="Edit">' + UI.icon('pen') + '</button><button class="icon-btn" data-toggle-e="' + esc(e.energy_id) + '" aria-label="' + (e.is_active ? 'Nonaktifkan' : 'Aktifkan') + '" title="' + (e.is_active ? 'Nonaktifkan' : 'Aktifkan') + '">' + UI.icon('power') + '</button>' +
@@ -180,26 +183,53 @@ window.FormModal = function (o) {
   var DET_FIELDS = [
     { name: 'category', label: 'Kategori', type: 'select', options: [['CHAMBER', 'Ion Chamber'], ['ELECTROMETER', 'Electrometer']], req: true },
     { name: 'chamber_type', label: 'Tipe Chamber', type: 'select', options: [['CYLINDRICAL', 'Silindris (Farmer)'], ['PLANE_PARALLEL', 'Plan-paralel'], ['', '— (elektrometer)']] },
-    { name: 'model_name', label: 'Model', req: true, ph: 'PTW 30013 Farmer', hint: 'harus sama dengan nama di tabel kQ' },
+    { name: 'model_name', label: 'Model', req: true, ph: 'PTW 30013 Farmer', hint: 'dicocokkan otomatis ke tabel kQ' },
+    { name: 'cavity_length_cm', label: 'Panjang rongga L', type: 'number', step: '0.01', hint: 'cm — untuk k_vol FFF (Tabel 4)' },
     { name: 'serial_no', label: 'Serial Number', req: true, mono: true },
     { name: 'cal_factor', label: 'Faktor Kalibrasi', type: 'number', step: '0.0001', req: true, hint: 'N_D,w (chamber) / k_elec (elektrometer)' },
     { name: 'unit', label: 'Satuan', type: 'select', options: [['cGy/nC', 'cGy/nC'], ['Gy/C', 'Gy/C'], ['mGy/nC', 'mGy/nC'], ['k_elec', 'k_elec (tanpa satuan)']] },
     { name: 'cal_lab', label: 'Lembaga Kalibrasi', ph: 'PTKMR BRIN' }, { name: 'cert_no', label: 'Nomor Sertifikat', mono: true },
     { name: 'cal_date', label: 'Tanggal Kalibrasi', type: 'date' }, { name: 'expiry_date', label: 'Tanggal Kedaluwarsa', type: 'date', req: true }
   ];
+  function libPicker() {
+    var cyl = TRS398.CHAMBERS.filter(function (c) { return c[1] === 'CYLINDRICAL'; }), pp = TRS398.CHAMBERS.filter(function (c) { return c[1] !== 'CYLINDRICAL'; });
+    var known = {}; TRS398.CHAMBERS.forEach(function (c) { known[TRS398.modelKey(c[0])] = 1; });
+    var extra = TRS398.PHOTON_EQ34.filter(function (p) { return !known[TRS398.modelKey(p[0])]; });
+    function opt(c) { return '<option value="' + esc(c[0]) + '">' + esc(c[0]) + (c[3] ? ' · L ' + c[3] + ' mm' : '') + (c[2] ? ' · ' + c[2] + ' cm³' : '') + '</option>'; }
+    return '<label class="field mb" data-f="lib"><span>Isi dari pustaka IAEA TRS-398 Rev. 1 <span class="hint">· Tabel 4, 5 &amp; 45</span></span><select id="lib-pick"><option value="">— pilih tipe chamber (opsional) —</option>' +
+      '<optgroup label="Silindris — Tabel 4">' + cyl.map(opt).join('') + '</optgroup>' +
+      '<optgroup label="Silindris lain dengan kQ foton — Tabel 45">' + extra.map(function (p) { return '<option value="' + esc(p[0]) + '">' + esc(p[0]) + '</option>'; }).join('') + '</optgroup>' +
+      '<optgroup label="Plan-paralel — Tabel 5">' + pp.map(opt).join('') + '</optgroup></select></label>';
+  }
+  function kqBadge(model) {
+    var ph = TRS398.lookupKq(Store.data.kq, model, 'PHOTON', 0.68), el = TRS398.lookupKq(Store.data.kq, model, 'ELECTRON', 5);
+    return '<span class="badge b-sm ' + (ph.error ? 'b-muted' : 'b-info') + '" title="' + esc(ph.error ? 'Tidak ada kQ foton' : ph.source) + '">' + (ph.error ? '✕' : '✓') + ' Foton</span> ' +
+      '<span class="badge b-sm ' + (el.error ? 'b-muted' : 'b-cleared') + '" title="' + esc(el.error ? 'Tidak ada kQ elektron' : el.source) + '">' + (el.error ? '✕' : '✓') + ' Elektron</span>';
+  }
   function detMount(el, form) {
+    var pick = el.querySelector('#lib-pick');
+    if (pick) pick.onchange = function () {
+      var c = TRS398.libraryChamber(this.value); if (!this.value) return;
+      form.querySelector('[name=category]').value = 'CHAMBER';
+      form.querySelector('[name=model_name]').value = this.value;
+      form.querySelector('[name=chamber_type]').value = c ? c[1] : 'CYLINDRICAL';
+      form.querySelector('[name=cavity_length_cm]').value = c && c[3] ? (c[3] / 10).toFixed(2) : '';
+      form.dispatchEvent(new Event('change'));
+      form.querySelector('[name=serial_no]').focus();
+    };
     function sync() {
       var c = form.querySelector('[name=category]').value;
       form.querySelector('[data-f=chamber_type]').classList.toggle('hidden', c !== 'CHAMBER');
+      form.querySelector('[data-f=cavity_length_cm]').classList.toggle('hidden', c !== 'CHAMBER');
       var u = form.querySelector('[name=unit]');
       if (c === 'ELECTROMETER') u.value = 'k_elec'; else if (u.value === 'k_elec') u.value = 'cGy/nC';
     }
-    form.querySelector('[name=category]').addEventListener('change', sync); sync();
+    form.addEventListener('change', sync); sync();
   }
   function detModal(row) {
     FormModal({
       title: row ? 'Edit Alat Ukur — ' + row.model_name : 'Tambah Detektor / Elektrometer', row: row || { category: 'CHAMBER', chamber_type: 'CYLINDRICAL', unit: 'cGy/nC' }, fields: DET_FIELDS, onMount: detMount,
-      intro: row ? '<div class="notice n-info mb">' + UI.icon('lock') + '<div>Setelah kalibrasi ulang, perbarui faktor & tanggal di sini. Pengukuran lama tetap memakai faktor saat diukur.</div></div>' : '',
+      intro: (row ? '<div class="notice n-info mb">' + UI.icon('lock') + '<div>Setelah kalibrasi ulang, perbarui faktor & tanggal di sini. Pengukuran lama tetap memakai faktor saat diukur.</div></div>' : '') + libPicker(),
       onSave: function (d) { if (d.category === 'ELECTROMETER') d.chamber_type = ''; return Api.mutate('saveMaster', { entity: 'detectors', row: d }); }, okToast: 'Data alat ukur disimpan.'
     });
   }
@@ -215,55 +245,82 @@ window.FormModal = function (o) {
       '<select class="sel" style="width:auto" id="d-cat">' + UI.options([['CHAMBER', 'Ion Chamber'], ['ELECTROMETER', 'Electrometer']], function (x) { return x[0]; }, function (x) { return x[1]; }, T.cat, 'Semua Kategori') + '</select>' +
       '<select class="sel" style="width:auto" id="d-st">' + UI.options([['VALID', 'VALID'], ['EXPIRING', 'EXPIRING'], ['EXPIRED', 'EXPIRED'], ['OFF', 'Nonaktif']], function (x) { return x[0]; }, function (x) { return x[1]; }, T.status, 'Semua Status Kalibrasi') + '</select></div>' +
       '<button class="btn btn-primary" id="d-add">' + UI.icon('plus') + 'Tambah Detektor / Elektrometer</button></div>' +
-      '<section class="card card-flush"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Kategori</th><th>Model &amp; Serial No</th><th class="r">Faktor Kalibrasi</th><th>Lembaga &amp; Sertifikat</th><th>Kalibrasi</th><th>Kedaluwarsa</th><th>Status</th><th class="r">Aksi</th></tr></thead><tbody>' +
+      '<section class="card card-flush"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Kategori</th><th>Model &amp; Serial No</th><th>kQ TRS-398</th><th class="r">Faktor Kalibrasi</th><th>Lembaga &amp; Sertifikat</th><th>Kalibrasi</th><th>Kedaluwarsa</th><th>Status</th><th class="r">Aksi</th></tr></thead><tbody>' +
       (list.length ? list.map(function (x) {
         var d = x.d, st = !d.is_active ? 'OFF' : x.cs.status;
         var b = st === 'VALID' ? '<span class="badge b-pass">' + UI.icon('check', 'ic-xs', 2.2) + 'VALID</span>' : st === 'EXPIRING' ? '<span class="badge b-warning">' + UI.icon('alert', 'ic-xs', 2.2) + 'EXPIRING (' + x.cs.days + 'h)</span>' : st === 'EXPIRED' ? '<span class="badge b-fail">' + UI.icon('alertC', 'ic-xs', 2.2) + 'EXPIRED</span>' : '<span class="badge b-muted">Nonaktif</span>';
         return '<tr class="' + (st === 'EXPIRING' ? 'row-warn' : '') + (st === 'OFF' ? ' row-off' : '') + '"><td class="label" style="color:' + (d.category === 'CHAMBER' ? 'var(--primary)' : 'var(--secondary)') + '">' + (d.category === 'CHAMBER' ? 'Ion Chamber' + (d.chamber_type === 'PLANE_PARALLEL' ? '<div class="small muted" style="font-weight:400">plan-paralel</div>' : '') : 'Electrometer') + '</td>' +
-          '<td><div class="t1">' + esc(d.model_name) + '</div><div class="mono small muted">#' + esc(d.serial_no) + '</div></td>' +
+          '<td><div class="t1">' + esc(d.model_name) + '</div><div class="mono small muted">#' + esc(d.serial_no) + (d.category === 'CHAMBER' && TRS398.ok(TRS398.num(d.cavity_length_cm)) ? ' · L ' + UI.f(d.cavity_length_cm, 2) + ' cm' : '') + '</div></td>' +
+          '<td>' + (d.category === 'CHAMBER' ? kqBadge(d.model_name) : '<span class="small muted">—</span>') + '</td>' +
           '<td class="r mono" style="font-weight:600">' + (d.category === 'CHAMBER' ? UI.f(d.cal_factor, 3) + ' ' + esc(d.unit) : 'k_elec = ' + UI.f(d.cal_factor, 4)) + '</td>' +
           '<td style="font-size:13px">' + esc(d.cal_lab) + ' · <span class="mono">' + esc(d.cert_no) + '</span></td><td class="mono small">' + UI.date(d.cal_date) + '</td>' +
           '<td class="mono small ' + (st === 'EXPIRING' ? 't-warning' : st === 'EXPIRED' ? 't-fail' : '') + '" style="font-weight:600">' + UI.date(d.expiry_date) + '</td><td>' + b + '</td>' +
           '<td class="r"><span class="acts"><button class="icon-btn" data-edit-d="' + esc(d.detector_id) + '" aria-label="Edit">' + UI.icon('pen') + '</button><button class="icon-btn" data-toggle-d="' + esc(d.detector_id) + '" aria-label="' + (d.is_active ? 'Nonaktifkan' : 'Aktifkan') + '" title="' + (d.is_active ? 'Nonaktifkan' : 'Aktifkan') + '">' + UI.icon('power') + '</button>' +
           UI.delBtn('data-del-d="' + esc(d.detector_id) + '"', AppModel.usage(Store.data, 'detectors', d.detector_id)) + '</span></td></tr>';
-      }).join('') : '<tr><td colspan="8" class="empty">Tidak ada alat ukur.</td></tr>') + '</tbody></table></div></section></div>';
+      }).join('') : '<tr><td colspan="9" class="empty">Tidak ada alat ukur.</td></tr>') + '</tbody></table></div></section></div>';
   }
 
   function kqModels() {
     var m = {};
-    Store.data.detectors.forEach(function (d) { if (d.category === 'CHAMBER') m[d.model_name] = 1; });
-    Store.data.kq.forEach(function (k) { m[k.chamber_model] = 1; });
-    return Object.keys(m).sort();
+    TRS398.PHOTON_EQ34.forEach(function (p) { m[p[0]] = 1; });
+    TRS398.ELECTRON_T20.forEach(function (p) { m[p[0]] = 1; });
+    Store.data.kq.forEach(function (k) { if (!Object.keys(m).some(function (x) { return TRS398.modelKey(x) === TRS398.modelKey(k.chamber_model); })) m[k.chamber_model] = 1; });
+    Store.data.detectors.forEach(function (d) { if (d.category === 'CHAMBER' && !Object.keys(m).some(function (x) { return TRS398.modelKey(x) === TRS398.modelKey(d.model_name); })) m[d.model_name] = 1; });
+    var mine = {}; Store.data.detectors.forEach(function (d) { if (d.category === 'CHAMBER' && d.is_active) mine[TRS398.modelKey(d.model_name)] = 1; });
+    return Object.keys(m).sort(function (a, b) { return (mine[TRS398.modelKey(b)] || 0) - (mine[TRS398.modelKey(a)] || 0) || a.localeCompare(b); }).map(function (x) { return { name: x, mine: !!mine[TRS398.modelKey(x)] }; });
   }
+  function kqRowsFor(model, beam) { return Store.data.kq.filter(function (k) { return TRS398.modelKey(k.chamber_model) === TRS398.modelKey(model) && k.beam_type === beam; }); }
+  var GRID_PH = [0.56, 0.59, 0.62, 0.65, 0.68, 0.70, 0.72, 0.74, 0.76, 0.78, 0.80, 0.82];
   function kqTab() {
     var models = kqModels();
-    if (models.indexOf(T.model) < 0) T.model = models[0] || '';
-    var rows = Store.data.kq.filter(function (k) { return k.chamber_model === T.model && k.beam_type === T.beam; }).sort(function (a, b) { return a.quality_index_val - b.quality_index_val; });
-    var qlabel = T.beam === 'PHOTON' ? 'TPR20,10' : 'R50 (cm)';
+    if (!models.some(function (m) { return m.name === T.model; })) T.model = (models[0] || {}).name || '';
+    var rows = kqRowsFor(T.model, T.beam), fit = rows.filter(function (r) { return r.method === 'EQ34'; })[0];
+    var tbl = rows.filter(function (r) { return r.method !== 'EQ34'; }).sort(function (a, b) { return a.quality_index_val - b.quality_index_val; });
+    var qlabel = T.beam === 'PHOTON' ? 'TPR20,10' : 'R50 (g/cm²)';
     var test = TRS398.lookupKq(Store.data.kq, T.model, T.beam, T.test);
+    var lib = !rows.length && !TRS398.lookupKq(Store.data.kq, T.model, T.beam, T.beam === 'PHOTON' ? 0.68 : 5).error;
+    var body;
+    if (fit) {
+      body = '<section class="card stack-sm"><div class="row-between"><div><h3 class="h-sm">Persamaan (34) — kQ foton</h3><div class="small muted">' + esc(fit.source) + '</div></div>' +
+        '<div class="row"><span class="chip">a = ' + fit.fit_a + '</span><span class="chip">b = ' + fit.fit_b + '</span><button class="icon-btn" data-edit-k="' + esc(fit.kq_id) + '" aria-label="Edit a, b">' + UI.icon('pen') + '</button></div></div>' +
+        '<div class="calc-out small" style="display:block;height:auto;padding:8px 12px;font-weight:500;white-space:normal">kQ(TPR) = [1 + exp((a − 0.57)/b)] / [1 + exp((a − TPR)/b)] · berlaku TPR20,10 0.56–0.82, tanpa interpolasi</div>' +
+        '<div class="tbl-wrap"><table class="tbl tbl-compact"><thead><tr><th>TPR20,10</th>' + GRID_PH.map(function (q) { return '<th class="r">' + q.toFixed(2) + '</th>'; }).join('') + '</tr></thead><tbody><tr><td class="label">kQ</td>' +
+        GRID_PH.map(function (q) { return '<td class="r mono">' + TRS398.lookupKq(Store.data.kq, T.model, 'PHOTON', q).value.toFixed(4) + '</td>'; }).join('') + '</tr></tbody></table></div>' +
+        '<p class="small muted" style="margin:0">Baris di atas = Tabel 16 Rev. 1 (dihitung ulang dari a, b). Punya kQ terukur dari SSDL? Pakai <b>Tempel Tabel</b> — data Anda menggantikan Pers. (34) untuk chamber ini.</p></section>';
+    } else {
+      body = '<section class="card card-flush"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>' + qlabel + '</th><th class="r">k_Q,Q0</th><th>Sumber</th><th class="r">Aksi</th></tr></thead><tbody>' +
+        (tbl.length ? tbl.map(function (k) {
+          return '<tr><td class="mono" style="font-weight:600">' + UI.f(k.quality_index_val, T.beam === 'PHOTON' ? 3 : 1) + '</td><td class="r mono">' + UI.f(k.kq_value, 4) + '</td><td class="small muted">' + esc(k.source) + '</td>' +
+            '<td class="r"><span class="acts"><button class="icon-btn" data-edit-k="' + esc(k.kq_id) + '" aria-label="Edit">' + UI.icon('pen') + '</button><button class="icon-btn danger" data-del-k="' + esc(k.kq_id) + '" aria-label="Hapus">' + UI.icon('trash') + '</button></span></td></tr>';
+        }).join('') : '<tr><td colspan="4" class="empty">' + (lib ? 'Belum ada di sheet — memakai <b>pustaka bawaan TRS-398 Rev.1</b>. Klik "Muat Pustaka" untuk menyalinnya ke Master Tabel kQ.' :
+          'Tidak ada data kQ ' + (T.beam === 'PHOTON' ? 'foton' : 'elektron') + ' untuk ' + esc(T.model) + ' di TRS-398 Rev.1. Isi dari sertifikat SSDL (Tempel Tabel).') + '</td></tr>') + '</tbody></table></div></section>';
+    }
     return '<div class="stack"><div class="card row-between" style="padding:16px"><div class="row wrap">' +
-      '<select class="sel" style="width:auto;font-weight:600;color:var(--primary)" id="k-model">' + UI.options(models, function (x) { return x; }, function (x) { return x; }, T.model) + '</select>' +
-      '<div class="seg"><button data-beam="PHOTON" class="' + (T.beam === 'PHOTON' ? 'on' : '') + '">Photon TPR20,10</button><button data-beam="ELECTRON" class="' + (T.beam === 'ELECTRON' ? 'on' : '') + '">Electron R50</button></div>' +
-      '<span class="badge b-info">Auto-interpolasi linier aktif di Input QC</span></div><div class="row"><button class="btn btn-ghost" id="k-paste">' + UI.icon('clipboard') + 'Tempel Tabel</button><button class="btn btn-secondary" id="k-add">' + UI.icon('plus') + 'Tambah Baris kQ</button></div></div>' +
-      '<div class="notice n-warning">' + UI.icon('alert') + '<div>Nilai awal di tabel ini adalah <b>CONTOH</b>. Sebelum Go-Live, ganti dengan nilai resmi IAEA TRS-398 (Tabel 14 foton / Tabel 18 elektron) atau sertifikat SSDL untuk chamber Anda. Interpolasi tidak mengekstrapolasi di luar rentang tabel.</div></div>' +
-      '<div class="split-4-8" style="grid-template-columns:minmax(0,8fr) minmax(0,4fr)"><section class="card card-flush"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>' + qlabel + '</th><th class="r">k_Q,Q0</th><th>Sumber</th><th class="r">Aksi</th></tr></thead><tbody>' +
-      (rows.length ? rows.map(function (k) {
-        return '<tr><td class="mono" style="font-weight:600">' + UI.f(k.quality_index_val, T.beam === 'PHOTON' ? 3 : 2) + '</td><td class="r mono">' + UI.f(k.kq_value, 4) + '</td><td class="small muted">' + esc(k.source) + '</td>' +
-          '<td class="r"><span class="acts"><button class="icon-btn" data-edit-k="' + esc(k.kq_id) + '" aria-label="Edit">' + UI.icon('pen') + '</button><button class="icon-btn danger" data-del-k="' + esc(k.kq_id) + '" aria-label="Hapus">' + UI.icon('trash') + '</button></span></td></tr>';
-      }).join('') : '<tr><td colspan="4" class="empty">Belum ada data kQ untuk ' + esc(T.model) + ' (' + T.beam + ').</td></tr>') + '</tbody></table></div></section>' +
-      '<section class="card stack-sm"><h3 class="h-sm">Uji Interpolasi</h3><label class="field"><span>' + qlabel + '</span><input id="k-test" type="number" step="0.001" value="' + esc(T.test) + '" placeholder="' + (T.beam === 'PHOTON' ? '0.734' : '3.61') + '"></label>' +
-      '<div class="calc-out" id="k-test-out" style="height:auto;min-height:40px;white-space:normal;padding:8px 12px">' + testOut(test) + '</div></section></div></div>';
+      '<select class="sel" style="width:auto;font-weight:600;color:var(--primary)" id="k-model">' + models.map(function (m) { return '<option value="' + esc(m.name) + '"' + (m.name === T.model ? ' selected' : '') + '>' + (m.mine ? '★ ' : '') + esc(m.name) + '</option>'; }).join('') + '</select>' +
+      '<div class="seg"><button data-beam="PHOTON" class="' + (T.beam === 'PHOTON' ? 'on' : '') + '">Foton · TPR20,10</button><button data-beam="ELECTRON" class="' + (T.beam === 'ELECTRON' ? 'on' : '') + '">Elektron · R50</button></div></div>' +
+      '<div class="row wrap"><button class="btn btn-ghost" id="k-lib">' + UI.icon('refresh') + 'Muat Pustaka TRS-398 Rev.1</button><button class="btn btn-ghost" id="k-paste">' + UI.icon('clipboard') + 'Tempel Tabel</button>' + (fit ? '' : '<button class="btn btn-secondary" id="k-add">' + UI.icon('plus') + 'Tambah Baris</button>') + '</div></div>' +
+      '<div class="notice n-info">' + UI.icon('shield') + '<div><b>Sumber: IAEA TRS-398 Rev. 1 (2024).</b> Foton: Pers. (34) dengan a, b Tabel 45 (26 chamber, kalibrasi ⁶⁰Co). Elektron: Tabel 20 dengan interpolasi linier (8 chamber; silindris hanya R50 ≥ 3 g/cm²). ★ = chamber yang Anda miliki. Tidak ada ekstrapolasi di luar rentang.</div></div>' +
+      '<div class="split-4-8" style="grid-template-columns:minmax(0,8fr) minmax(0,4fr)">' + body +
+      '<section class="card stack-sm"><h3 class="h-sm">Uji kQ</h3><label class="field"><span>' + qlabel + '</span><input id="k-test" type="number" step="0.001" value="' + esc(T.test) + '" placeholder="' + (T.beam === 'PHOTON' ? '0.734' : '3.61') + '"></label>' +
+      '<div class="calc-out" id="k-test-out" style="display:block;height:auto;min-height:40px;white-space:normal;padding:8px 12px">' + testOut(test) + '</div></section></div></div>';
   }
   function testOut(t) {
     if (!T.test) return '<span class="muted" style="font-weight:400">Masukkan nilai kualitas berkas</span>';
-    return t.error ? '<span class="t-fail small" style="font-family:var(--font);font-weight:500">' + esc(t.error) + '</span>' : 'k_Q = ' + t.value.toFixed(4) + (t.exact ? '' : '<div class="small muted" style="font-weight:400">antara ' + t.lo.x + ' (' + t.lo.y + ') dan ' + t.hi.x + ' (' + t.hi.y + ')</div>');
+    if (t.error) return '<span class="t-fail small" style="font-family:var(--font);font-weight:500">' + esc(t.error) + '</span>';
+    return 'k_Q = ' + t.value.toFixed(4) + '<div class="small muted" style="font-weight:400">' + (t.method === 'EQ34' ? 'Pers. (34)' : t.exact ? 'nilai tabel' : 'interpolasi ' + t.lo.x + ' (' + t.lo.y + ') – ' + t.hi.x + ' (' + t.hi.y + ')') + ' · ' + esc(t.source) + '</div>';
   }
   function kqModal(row) {
+    if (row && row.method === 'EQ34') {
+      return FormModal({ title: 'Parameter Pers. (34) — ' + row.chamber_model, size: 'sm', row: row,
+        intro: '<div class="notice n-warning mb">' + UI.icon('alert') + '<div>Nilai dari Tabel 45 TRS-398 Rev. 1. Ubah hanya bila ada revisi resmi.</div></div>',
+        fields: [{ name: 'fit_a', label: 'a', type: 'number', step: '0.00001', req: true }, { name: 'fit_b', label: 'b', type: 'number', step: '0.00001', req: true }, { name: 'source', label: 'Sumber', span: true }],
+        onSave: function (d) { return Api.mutate('saveMaster', { entity: 'kq', row: d }); }, okToast: 'Parameter disimpan.' });
+    }
     FormModal({
-      title: row ? 'Edit Baris kQ' : 'Tambah Baris kQ — ' + T.model, size: 'sm', row: row || { chamber_model: T.model, beam_type: T.beam, source: 'IAEA TRS-398' },
+      title: row ? 'Edit Baris kQ' : 'Tambah Baris kQ — ' + T.model, size: 'sm', row: row || { chamber_model: T.model, beam_type: T.beam, source: 'Sertifikat SSDL', method: 'TABLE' },
       fields: [{ name: 'chamber_model', label: 'Model Chamber', req: true, span: true }, { name: 'beam_type', label: 'Jenis Berkas', type: 'select', options: [['PHOTON', 'Photon'], ['ELECTRON', 'Electron']], req: true },
-        { name: 'quality_index_val', label: 'TPR20,10 / R50', type: 'number', step: '0.001', req: true }, { name: 'kq_value', label: 'k_Q,Q0', type: 'number', step: '0.0001', req: true }, { name: 'source', label: 'Sumber', ph: 'IAEA TRS-398 Tabel 14' }],
-      onSave: function (d) { return Api.mutate('saveMaster', { entity: 'kq', row: d }); }, okToast: 'Baris kQ disimpan.'
+        { name: 'quality_index_val', label: 'TPR20,10 / R50', type: 'number', step: '0.001', req: true }, { name: 'kq_value', label: 'k_Q,Q0', type: 'number', step: '0.0001', req: true }, { name: 'source', label: 'Sumber', ph: 'Sertifikat SSDL' }],
+      onSave: function (d) { d.method = 'TABLE'; return Api.mutate('saveMaster', { entity: 'kq', row: d }); }, okToast: 'Baris kQ disimpan.'
     });
   }
   /* "0.62<tab>0.997", "0,62;0,997", "0.62, 0.997", "0,62 0,997" */
@@ -277,7 +334,7 @@ window.FormModal = function (o) {
       title: 'Tempel Tabel kQ — ' + T.model + ' (' + T.beam + ')',
       body: '<p class="small muted" style="margin-top:0">Salin dua kolom dari Excel/PDF (kualitas berkas lalu kQ), satu baris per titik. Pemisah tab, spasi, titik koma atau koma (desimal titik). <b>Seluruh baris lama untuk model & jenis berkas ini akan diganti.</b></p>' +
         '<label class="field"><span>Data</span><textarea id="p-data" rows="10" class="mono" placeholder="0.62\t0.997\n0.65\t0.994\n0.68\t0.990"></textarea></label>' +
-        '<label class="field mt"><span>Sumber</span><input id="p-src" value="IAEA TRS-398 ' + (T.beam === 'PHOTON' ? 'Tabel 14' : 'Tabel 18') + '"></label><div id="p-prev" class="small muted mt"></div>',
+        '<label class="field mt"><span>Sumber</span><input id="p-src" value="Sertifikat SSDL"></label><div id="p-prev" class="small muted mt"></div>',
       footer: '<button class="btn btn-ghost" data-close>Batal</button><button class="btn btn-primary" id="p-save" disabled>Ganti Tabel</button>',
       onMount: function (el, close) {
         var rows = [];
@@ -324,7 +381,16 @@ window.FormModal = function (o) {
       } else {
         q('#k-model').onchange = function () { T.model = this.value; App.render({ keepScroll: true }); };
         el.querySelectorAll('[data-beam]').forEach(function (b) { b.onclick = function () { T.beam = b.dataset.beam; T.test = ''; App.render({ keepScroll: true }); }; });
-        q('#k-add').onclick = function () { kqModal(); };
+        if (q('#k-add')) q('#k-add').onclick = function () { kqModal(); };
+        q('#k-lib').onclick = async function () {
+          var ok = await UI.confirm({ title: 'Muat pustaka IAEA TRS-398 Rev. 1?', body: '<p>Semua baris kQ <b>CONTOH</b> dan pustaka lama diganti dengan data resmi Rev. 1 (Pers. 34/Tabel 45 foton, Tabel 20 elektron).</p><p>Baris yang Anda isi sendiri (mis. dari sertifikat SSDL) <b>tetap dipertahankan</b>.</p>', ok: 'Muat Pustaka' });
+          if (!ok) return;
+          UI.busy(this, true, 'Memuat...');
+          var r = Api.isDemo() ? await Api.mutate('loadTrsLibrary', {}) : await Api.raw('loadTrsLibrary', {});
+          if (r.success && !Api.isDemo()) await Api.sync(true);
+          UI.busy(this, false);
+          UI.toast(esc(r.message || (r.success ? 'Pustaka dimuat.' : 'Gagal memuat.')), r.success ? 'success' : 'error');
+        };
         q('#k-paste').onclick = pasteModal;
         q('#k-test').oninput = function () { T.test = this.value; q('#k-test-out').innerHTML = testOut(TRS398.lookupKq(Store.data.kq, T.model, T.beam, T.test)); };
         el.querySelectorAll('[data-edit-k]').forEach(function (b) { b.onclick = function () { kqModal(Store.data.kq.filter(function (k) { return k.kq_id === b.dataset.editK; })[0]); }; });

@@ -13,13 +13,13 @@ var AppModel = (function () {
     Master_Personnel: { key: 'person_id', cols: [['person_id', 's'], ['full_name', 's'], ['role', 's'], ['nip_str', 's'], ['email', 's'], ['position', 's'], ['is_active', 'b']] },
     Master_Linac_Energy: { key: 'energy_id', cols: [['energy_id', 's'], ['linac_id', 's'], ['linac_name', 's'], ['linac_model', 's'], ['serial_no', 's'], ['bunker', 's'],
       ['beam_type', 's'], ['energy_label', 's'], ['setup_type', 's'], ['ssd_sad_cm', 'n'], ['z_ref_cm', 'n'], ['z_max_cm', 'n'], ['pdd_zref', 'n'], ['tmr_zref', 'n'],
-      ['quality_index', 'n'], ['baseline_cgy_mu', 'n'], ['kpol_default', 'n'], ['ks_default', 'n'], ['is_active', 'b']] },
+      ['quality_index', 'n'], ['baseline_cgy_mu', 'n'], ['kpol_default', 'n'], ['ks_default', 'n'], ['is_active', 'b'], ['is_fff', 'b']] },
     Master_Detector: { key: 'detector_id', cols: [['detector_id', 's'], ['category', 's'], ['chamber_type', 's'], ['model_name', 's'], ['serial_no', 's'], ['cal_factor', 'n'], ['unit', 's'],
-      ['cal_lab', 's'], ['cert_no', 's'], ['cal_date', 's'], ['expiry_date', 's'], ['is_active', 'b']] },
-    Ref_kQ_TRS398: { key: 'kq_id', cols: [['kq_id', 's'], ['chamber_model', 's'], ['beam_type', 's'], ['quality_index_val', 'n'], ['kq_value', 'n'], ['source', 's']] },
+      ['cal_lab', 's'], ['cert_no', 's'], ['cal_date', 's'], ['expiry_date', 's'], ['is_active', 'b'], ['cavity_length_cm', 'n']] },
+    Ref_kQ_TRS398: { key: 'kq_id', cols: [['kq_id', 's'], ['chamber_model', 's'], ['beam_type', 's'], ['quality_index_val', 'n'], ['kq_value', 'n'], ['source', 's'], ['method', 's'], ['fit_a', 'n'], ['fit_b', 'n']] },
     Trans_QC_Absolut: { key: 'qc_id', cols: [['qc_id', 's'], ['session_group_id', 's'], ['record_type', 's'], ['iteration_no', 'n'], ['qc_datetime', 's'],
       ['energy_id', 's'], ['chamber_id', 's'], ['electrometer_id', 's'], ['fismed_id', 's'], ['temp_c', 'n'], ['press_kpa', 'n'], ['mu_set', 'n'],
-      ['m_raw_list', 'j'], ['m_raw_avg', 'n'], ['kpol_mode', 's'], ['m_plus', 'n'], ['m_minus', 'n'], ['ks_mode', 's'], ['m_v1', 'n'], ['m_v2', 'n'], ['v1', 'n'], ['v2', 'n'], ['m_minus_list', 'j'], ['m_v2_list', 'j'],
+      ['m_raw_list', 'j'], ['m_raw_avg', 'n'], ['kpol_mode', 's'], ['m_plus', 'n'], ['m_minus', 'n'], ['ks_mode', 's'], ['m_v1', 'n'], ['m_v2', 'n'], ['v1', 'n'], ['v2', 'n'], ['m_minus_list', 'j'], ['m_v2_list', 'j'], ['k_vol', 'n'], ['kvol_mode', 's'],
       ['k_tp', 'n'], ['k_pol', 'n'], ['k_s', 'n'], ['k_elec', 'n'], ['n_dw', 'n'], ['k_q', 'n'], ['quality_index', 'n'], ['setup_type', 's'], ['pdd_used', 'n'], ['tmr_used', 'n'],
       ['baseline_used', 'n'], ['m_q', 'n'], ['dw_zref', 'n'], ['dw_zmax', 'n'], ['output_cgy_mu', 'n'], ['deviation_pct', 'n'], ['status', 's'],
       ['warning_limit_used', 'n'], ['action_limit_used', 'n'], ['adj_datetime', 's'], ['adj_category', 's'], ['adj_action_desc', 's'], ['adj_performer', 's'], ['adj_ticket', 's'],
@@ -43,6 +43,8 @@ var AppModel = (function () {
     return ra - rb || (parseFloat(a.energy_label) || 0) - (parseFloat(b.energy_label) || 0) || String(a.energy_label).localeCompare(String(b.energy_label));
   }
   function idx(list, key) { var m = {}; (list || []).forEach(function (x) { m[x[key]] = x; }); return m; }
+
+  function isFff(en) { return en.is_fff === true || String(en.is_fff) === 'true' || /FFF/i.test(String(en.energy_label || '')); }
 
   /* Rata-rata daftar bacaan (nilai absolut bila abs), atau nilai tunggal lama sebagai cadangan */
   function avgOr(list, single, abs) {
@@ -73,7 +75,12 @@ var AppModel = (function () {
       ksMode: rec.ks_mode || 'stored', ks: rec.ks_mode === 'measured' ? '' : (ok(n(rec.k_s)) ? rec.k_s : en.ks_default),
       mV1: avgOr(rec.m_raw_list, rec.m_v1), mV2: avgOr(rec.m_v2_list, rec.m_v2), v1: rec.v1, v2: rec.v2,
       setup: en.setup_type, pdd: en.pdd_zref, tmr: en.tmr_zref, baseline: en.baseline_cgy_mu,
-      warn: lim.warn, action: lim.action, snapshot: false
+      warn: lim.warn, action: lim.action, snapshot: false,
+      chamberType: ch.chamber_type,
+      /* k_vol untuk FFF: SDD = SSD + z_ref (setup SSD) atau SAD (setup isosentris) */
+      fff: isFff(en), kvolMode: rec.kvol_mode === 'manual' ? 'manual' : 'eq22', kvol: rec.k_vol,
+      cavityLengthCm: ch.cavity_length_cm,
+      sdd: en.setup_type === 'SAD' ? n(en.ssd_sad_cm) || 100 : (n(en.ssd_sad_cm) || 100) + (n(en.z_ref_cm) || 0)
     };
     if (snap && ok(n(snap.n_dw)) && ok(n(snap.k_q))) {
       inp.ndw = snap.n_dw; inp.ndwUnit = 'cGy/nC'; inp.kq = snap.k_q;
@@ -85,6 +92,7 @@ var AppModel = (function () {
       if (ok(n(snap.quality_index))) inp.qualityIndex = snap.quality_index;
       if (ok(n(snap.warning_limit_used))) inp.warn = n(snap.warning_limit_used);
       if (ok(n(snap.action_limit_used))) inp.action = n(snap.action_limit_used);
+      if (inp.fff && rec.kvol_mode !== 'manual' && ok(n(snap.k_vol))) { inp.kvolMode = 'manual'; inp.kvol = snap.k_vol; inp.kvolFromSnapshot = true; }
       inp.snapshot = true;
     }
     return inp;
@@ -93,6 +101,7 @@ var AppModel = (function () {
   /* Terapkan hasil compute ke record (kolom turunan + snapshot parameter) */
   function applyResult(rec, r, inp) {
     rec.m_raw_avg = r.mAvg; rec.k_tp = r.ktp;
+    rec.k_vol = r.kvol; rec.kvol_mode = inp.kvolFromSnapshot ? (rec.kvol_mode || 'eq22') : r.kvolInfo.mode;
     if (inp.kpolMode === 'measured') { rec.m_plus = TRS398.num(inp.mPlus); rec.m_minus = TRS398.num(inp.mMinus); }
     if (inp.ksMode === 'measured') { rec.m_v1 = TRS398.num(inp.mV1); rec.m_v2 = TRS398.num(inp.mV2); } rec.k_pol = r.kpol; rec.k_s = r.ks; rec.k_elec = r.kelec;
     rec.n_dw = r.ndw; rec.k_q = r.kq; rec.quality_index = TRS398.num(inp.qualityIndex); rec.setup_type = inp.setup;
@@ -145,8 +154,7 @@ var AppModel = (function () {
 
   /* ------------------------------------------------------------------
    * SEED DEMO — deterministik, dihitung lewat mesin TRS-398 asli
-   * Nilai kQ di bawah adalah CONTOH. Wajib diverifikasi terhadap
-   * IAEA TRS-398 (Tabel 14 foton, Tabel 18 elektron) sebelum klinis.
+   * Data kQ dari IAEA TRS-398 Rev. 1; data pesawat/detektor/personel = contoh.
    * ------------------------------------------------------------------ */
   function buildSeed() {
     var config = {};
@@ -165,7 +173,7 @@ var AppModel = (function () {
     function E(id, lid, lname, model, sn, bunker, bt, label, setup, zref, zmax, pdd, tmr, q, kpol, ks) {
       return { energy_id: id, linac_id: lid, linac_name: lname, linac_model: model, serial_no: sn, bunker: bunker, beam_type: bt, energy_label: label,
         setup_type: setup, ssd_sad_cm: 100, z_ref_cm: zref, z_max_cm: zmax, pdd_zref: pdd, tmr_zref: tmr, quality_index: q, baseline_cgy_mu: 1.000,
-        kpol_default: kpol, ks_default: ks, is_active: true };
+        kpol_default: kpol, ks_default: ks, is_active: true, is_fff: /FFF/.test(label) };
     }
     var TB = ['L01', 'Varian TrueBeam #1', 'Varian TrueBeam STx', 'SN-TB-2041', 'Bunker 1'];
     var VH = ['L02', 'Elekta Versa HD #2', 'Elekta Versa HD', 'SN-VH-8812', 'Bunker 2'];
@@ -181,21 +189,15 @@ var AppModel = (function () {
     ];
 
     var detectors = [
-      { detector_id: 'D01', category: 'CHAMBER', chamber_type: 'CYLINDRICAL', model_name: 'PTW 30013 Farmer', serial_no: 'SN-4421', cal_factor: 5.382, unit: 'cGy/nC', cal_lab: 'PTKMR BRIN', cert_no: 'S-2024-882', cal_date: '2024-12-14', expiry_date: '2026-12-14', is_active: true },
-      { detector_id: 'D02', category: 'CHAMBER', chamber_type: 'CYLINDRICAL', model_name: 'IBA FC65-G', serial_no: 'SN-1190', cal_factor: 4.815, unit: 'cGy/nC', cal_lab: 'PTKMR BRIN', cert_no: 'S-2025-114', cal_date: '2025-08-10', expiry_date: '2027-08-10', is_active: true },
+      { detector_id: 'D01', category: 'CHAMBER', chamber_type: 'CYLINDRICAL', model_name: 'PTW 30013 Farmer', serial_no: 'SN-4421', cal_factor: 5.382, unit: 'cGy/nC', cal_lab: 'PTKMR BRIN', cert_no: 'S-2024-882', cal_date: '2024-12-14', expiry_date: '2026-12-14', is_active: true, cavity_length_cm: 2.3 },
+      { detector_id: 'D02', category: 'CHAMBER', chamber_type: 'CYLINDRICAL', model_name: 'IBA FC65-G Farmer', serial_no: 'SN-1190', cal_factor: 4.815, unit: 'cGy/nC', cal_lab: 'PTKMR BRIN', cert_no: 'S-2025-114', cal_date: '2025-08-10', expiry_date: '2027-08-10', is_active: true, cavity_length_cm: 2.3 },
       { detector_id: 'D03', category: 'CHAMBER', chamber_type: 'PLANE_PARALLEL', model_name: 'PTW 34001 Roos', serial_no: 'SN-2210', cal_factor: 8.215, unit: 'cGy/nC', cal_lab: 'PTKMR BRIN', cert_no: 'S-2025-207', cal_date: '2025-03-02', expiry_date: '2027-03-02', is_active: true },
       { detector_id: 'D11', category: 'ELECTROMETER', chamber_type: '', model_name: 'PTW UNIDOS E', serial_no: 'SN-EL-091', cal_factor: 1.000, unit: 'k_elec', cal_lab: 'PTKMR BRIN', cert_no: 'E-2025-042', cal_date: '2025-09-18', expiry_date: '2027-09-18', is_active: true },
       { detector_id: 'D12', category: 'ELECTROMETER', chamber_type: '', model_name: 'IBA Dose 1', serial_no: 'SN-EL-114', cal_factor: 0.9995, unit: 'k_elec', cal_lab: 'PTKMR BRIN', cert_no: 'E-2025-090', cal_date: '2025-05-20', expiry_date: '2027-05-20', is_active: true }
     ];
 
-    var kq = [], n = 0;
-    function K(model, bt, pairs) {
-      pairs.forEach(function (p) { kq.push({ kq_id: 'KQ' + String(++n).padStart(3, '0'), chamber_model: model, beam_type: bt, quality_index_val: p[0], kq_value: p[1], source: 'CONTOH — verifikasi TRS-398' }); });
-    }
-    K('PTW 30013 Farmer', 'PHOTON', [[0.50, 1.004], [0.56, 1.001], [0.62, 0.997], [0.65, 0.994], [0.68, 0.990], [0.70, 0.988], [0.72, 0.985], [0.74, 0.981], [0.76, 0.976], [0.78, 0.969], [0.80, 0.962]]);
-    K('IBA FC65-G', 'PHOTON', [[0.50, 1.005], [0.56, 1.002], [0.62, 0.998], [0.65, 0.995], [0.68, 0.992], [0.70, 0.989], [0.72, 0.986], [0.74, 0.982], [0.76, 0.977], [0.78, 0.971], [0.80, 0.964]]);
-    K('PTW 34001 Roos', 'ELECTRON', [[1.0, 0.965], [1.5, 0.955], [2.0, 0.946], [2.5, 0.939], [3.0, 0.934], [3.5, 0.929], [4.0, 0.926], [5.0, 0.919], [6.0, 0.914], [7.0, 0.910], [8.0, 0.906]]);
-    K('PTW 30013 Farmer', 'ELECTRON', [[4.0, 0.917], [5.0, 0.912], [6.0, 0.908], [7.0, 0.905], [8.0, 0.901], [10.0, 0.895]]);
+    /* Pustaka resmi IAEA TRS-398 Rev. 1: Pers. (34)+Tabel 45 (foton), Tabel 20 (elektron) */
+    var kq = TRS398.libraryKqRows().map(function (r, i) { r.kq_id = 'KQ' + String(i + 1).padStart(3, '0'); return r; });
 
     var db = { config: config, energies: energies, detectors: detectors, kq: kq, personnel: personnel };
     var transactions = [], seq = 1050;
@@ -262,6 +264,6 @@ var AppModel = (function () {
     return { config: config, personnel: personnel, energies: energies, detectors: detectors, kq: kq, transactions: transactions, notifications: [] };
   }
 
-  return { usage: usage, avgOr: avgOr, energyOrder: energyOrder, SCHEMA: SCHEMA, DEFAULT_CONFIG: DEFAULT_CONFIG, idx: idx, buildInput: buildInput, applyResult: applyResult,
+  return { isFff: isFff, usage: usage, avgOr: avgOr, energyOrder: energyOrder, SCHEMA: SCHEMA, DEFAULT_CONFIG: DEFAULT_CONFIG, idx: idx, buildInput: buildInput, applyResult: applyResult,
     recompute: recompute, groupSessions: groupSessions, calStatus: calStatus, buildSeed: buildSeed };
 })();

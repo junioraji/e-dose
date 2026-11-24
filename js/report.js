@@ -237,7 +237,7 @@ var ReportKit = (function () {
         '<svg width="48" height="48" viewBox="0 0 32 32"><rect x="13" y="4" width="6" height="24" rx="2" fill="#1B365D"/><rect x="4" y="13" width="24" height="6" rx="2" fill="#0072CE"/><circle cx="16" cy="16" r="3.5" fill="#2E9E5B"/></svg>') +
       '</td><td style="border:none;padding:0 8px"><div style="font-size:13px;font-weight:700;color:#1B365D">' + esc(String(H.name || '').toUpperCase()) + '</div>' +
       '<div style="font-weight:600;color:#1B365D">' + esc(H.unit) + '</div><div class="muted">' + esc(H.address) + '</div>' +
-      '<div class="mono muted small">Protokol Acuan: IAEA TRS-398</div></td>' +
+      '<div class="mono muted small">Protokol Acuan: IAEA TRS-398 Rev. 1 (2024)</div></td>' +
       '<td style="border:none;text-align:right;padding:0;white-space:nowrap"><div style="color:#0072CE;font-size:9.5px;font-weight:700;text-transform:uppercase">Dokumen Resmi QC</div>' +
       '<div class="mono" style="font-weight:700;color:#1B365D;font-size:12px">' + esc(ctx.docId) + '</div></td></tr></table>');
     h.push('<h1>' + esc(ctx.title) + '</h1>');
@@ -296,6 +296,7 @@ var ReportKit = (function () {
           '<tr><td>Bacaan M_raw (nC)</td><td class="mono" colspan="3">' + (r.m_raw_list || []).map(function (x) { return f(x, 3); }).join(' · ') + ' → rata-rata ' + f(r.m_raw_avg, 4) + '</td></tr>' +
           '<tr><td>k_TP</td><td class="mono">' + f(r.k_tp, 4) + '</td><td>k_elec</td><td class="mono">' + f(r.k_elec, 4) + '</td></tr>' +
           '<tr><td>k_pol (' + (r.kpol_mode === 'measured' ? 'diukur' : 'tersimpan') + ')</td><td class="mono">' + f(r.k_pol, 4) + '</td><td>k_s (' + (r.ks_mode === 'measured' ? 'dua tegangan' : 'tersimpan') + ')</td><td class="mono">' + f(r.k_s, 4) + '</td></tr>' +
+          (TRS398.ok(N(r.k_vol)) && Math.abs(N(r.k_vol) - 1) > 1e-9 ? '<tr><td>k_vol (FFF, ' + (r.kvol_mode === 'manual' ? 'profil terukur' : 'Pers. 22') + ')</td><td class="mono" colspan="3">' + f(r.k_vol, 4) + '</td></tr>' : '') +
           '<tr><td>M_Q (nC)</td><td class="mono">' + f(r.m_q, 4) + '</td><td>N_D,w,Q0 · k_Q,Q0</td><td class="mono">' + f(r.n_dw, 4) + ' cGy/nC · ' + f(r.k_q, 4) + '</td></tr>' +
           '<tr><td>D_w,Q(z_ref)</td><td class="mono">' + f(r.dw_zref, 3) + ' cGy</td><td>' + (r.setup_type === 'SAD' ? 'TMR(z_ref)' : 'PDD(z_ref)') + '</td><td class="mono">' + (r.setup_type === 'SAD' ? f(r.tmr_used, 4) : f(r.pdd_used, 2) + '%') + '</td></tr>' +
           '<tr><td>D_w,Q(z_max)</td><td class="mono">' + f(r.dw_zmax, 3) + ' cGy</td><td>Output / Baseline</td><td class="mono"><b>' + f(r.output_cgy_mu, 4) + '</b> / ' + f(r.baseline_used, 3) + ' cGy/MU</td></tr>' +

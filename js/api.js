@@ -66,12 +66,12 @@ var LocalBackend = (function () {
   function today() { return nowIso().slice(0, 10); }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function pick(src, fields) { var o = {}; fields.forEach(function (f) { if (src[f] !== undefined) o[f] = src[f]; }); return o; }
-  var MEAS = ['qc_datetime', 'fismed_id', 'temp_c', 'press_kpa', 'mu_set', 'm_raw_list', 'kpol_mode', 'k_pol', 'm_plus', 'm_minus', 'm_minus_list', 'ks_mode', 'k_s', 'm_v1', 'm_v2', 'm_v2_list', 'v1', 'v2', 'notes'];
+  var MEAS = ['qc_datetime', 'fismed_id', 'temp_c', 'press_kpa', 'mu_set', 'm_raw_list', 'kpol_mode', 'k_pol', 'm_plus', 'm_minus', 'm_minus_list', 'ks_mode', 'k_s', 'm_v1', 'm_v2', 'm_v2_list', 'v1', 'v2', 'kvol_mode', 'k_vol', 'notes'];
   var ADJ = ['adj_datetime', 'adj_category', 'adj_action_desc', 'adj_performer', 'adj_ticket'];
   var ENT_ID = { personnel: ['person_id', 'P', 3], energies: ['energy_id', 'E', 2], detectors: ['detector_id', 'D', 2], kq: ['kq_id', 'KQ', 3] };
   var REQ = {
     personnel: ['full_name', 'role'], energies: ['linac_name', 'beam_type', 'energy_label', 'setup_type', 'z_ref_cm', 'quality_index', 'baseline_cgy_mu'],
-    detectors: ['category', 'model_name', 'serial_no', 'cal_factor', 'expiry_date'], kq: ['chamber_model', 'beam_type', 'quality_index_val', 'kq_value']
+    detectors: ['category', 'model_name', 'serial_no', 'cal_factor', 'expiry_date'], kq: ['chamber_model', 'beam_type']
   };
   function cleanLists(r) { ['m_raw_list', 'm_minus_list', 'm_v2_list'].forEach(function (k) { if (r[k] !== undefined) r[k] = cleanReadings(r[k]); }); return r; }
   function cleanReadings(l) { return (l || []).map(Number).filter(function (x) { return isFinite(x) && x !== 0; }).slice(0, 10); }
@@ -158,6 +158,7 @@ var LocalBackend = (function () {
         if (!meta) return fail('Entitas tidak valid.');
         var miss = (REQ[ent] || []).filter(function (k) { return row[k] === '' || row[k] === undefined || row[k] === null; });
         if (miss.length) return fail('Kolom wajib belum diisi: ' + miss.join(', '));
+        if (ent === 'kq' && !(isFinite(parseFloat(row.fit_a)) && isFinite(parseFloat(row.fit_b))) && !(isFinite(parseFloat(row.quality_index_val)) && isFinite(parseFloat(row.kq_value)))) return fail('Isi kualitas berkas & kQ, atau parameter a & b Pers. (34).');
         var cleanRow = clone(row);
         if (!cleanRow[meta[0]]) { cleanRow[meta[0]] = temp ? tmp(meta[1]) : nextId(list, meta[0], meta[1], meta[2]); if (cleanRow.is_active === undefined && ent !== 'kq') cleanRow.is_active = true; }
         else { var o2 = list.filter(function (x) { return x[meta[0]] === cleanRow[meta[0]]; })[0]; if (!o2) return fail('Data tidak ditemukan.'); cleanRow = Object.assign(clone(o2), cleanRow); }
@@ -184,13 +185,21 @@ var LocalBackend = (function () {
         var rm = {}; rm[d.entity] = [d.id];
         return { success: true, changes: {}, removed: rm };
       }
+      case 'loadTrsLibrary': {
+        var keepRows = db.kq.filter(function (r) { return d.all !== true && !/^CONTOH|^TRS-398 Rev\.1/.test(String(r.source)); });
+        var mineK = {}; keepRows.forEach(function (r) { mineK[TRS398.modelKey(r.chamber_model) + '|' + r.beam_type] = true; });
+        var cnt = 0;
+        var libRows = TRS398.libraryKqRows().filter(function (r) { return !mineK[TRS398.modelKey(r.chamber_model) + '|' + r.beam_type]; })
+          .map(function (r) { r.kq_id = 'KQ' + String(++cnt).padStart(3, '0') + (temp ? '-' + Date.now() : ''); return r; });
+        return { success: true, replaceKq: libRows.concat(keepRows), message: 'Pustaka TRS-398 Rev.1 dimuat: ' + libRows.length + ' baris' + (keepRows.length ? ', ' + keepRows.length + ' baris milik Anda dipertahankan' : '') + '.' };
+      }
       case 'saveKqBulk': {
         var model = String(d.chamber_model || '').trim(), bt = String(d.beam_type || '').toUpperCase();
         var pts = (d.rows || []).map(function (r) { return [Number(r[0]), Number(r[1])]; }).filter(function (r) { return isFinite(r[0]) && isFinite(r[1]) && r[1] > 0.5 && r[1] < 1.2; });
         if (!model || !pts.length) return fail('Data kQ tidak valid.');
-        var rem = db.kq.filter(function (r) { return r.chamber_model.toLowerCase() === model.toLowerCase() && r.beam_type === bt; }).map(function (r) { return r.kq_id; });
+        var rem = db.kq.filter(function (r) { return TRS398.modelKey(r.chamber_model) === TRS398.modelKey(model) && r.beam_type === bt; }).map(function (r) { return r.kq_id; });
         var n = db.kq.reduce(function (m, r) { var x = /^KQ(\d+)$/.exec(r.kq_id); return x ? Math.max(m, +x[1]) : m; }, 0);
-        var added = pts.map(function (p) { return { kq_id: temp ? tmp('KQ') : 'KQ' + String(++n).padStart(3, '0'), chamber_model: model, beam_type: bt, quality_index_val: p[0], kq_value: p[1], source: d.source || 'Input manual' }; });
+        var added = pts.map(function (p) { return { kq_id: temp ? tmp('KQ') : 'KQ' + String(++n).padStart(3, '0'), chamber_model: model, beam_type: bt, quality_index_val: p[0], kq_value: p[1], source: d.source || 'Input manual', method: 'TABLE' }; });
         return { success: true, changes: { kq: added }, removed: { kq: rem } };
       }
       case 'renameLinac': {
@@ -289,7 +298,7 @@ var Api = (function () {
   function mutate(action, data) {
     if (isDemo()) {
       var r = LocalBackend.run(action, data, Store.data, false);
-      if (r.success) { Store.patch(r.changes, r.removed); Store.version++; Store.persist(); Store.emit('write'); }
+      if (r.success) { if (r.replaceKq) Store.data.kq = r.replaceKq; Store.patch(r.changes, r.removed); Store.version++; Store.persist(); Store.emit('write'); }
       return Promise.resolve(r);
     }
     if (!OPTIMISTIC[action]) return raw(action, data);
