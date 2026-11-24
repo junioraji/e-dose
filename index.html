@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1B365D">
+  <meta name="robots" content="noindex, nofollow">
+  <title>e-Dose Agora — QC Absolut Linac (IAEA TRS-398)</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='13' y='4' width='6' height='24' rx='2' fill='%231B365D'/%3E%3Crect x='4' y='13' width='24' height='6' rx='2' fill='%230072CE'/%3E%3Ccircle cx='16' cy='16' r='3.5' fill='%232E9E5B'/%3E%3C/svg%3E">
+  <!-- Tentukan layar (login / aplikasi) SEBELUM render agar tidak berkedip -->
+  <script>
+    try { var a = JSON.parse(localStorage.getItem('edose_auth_v1') || 'null');
+      if (a && a.expiresAt > Date.now() && localStorage.getItem('edose_data_v1')) document.documentElement.classList.add('has-auth'); } catch (e) {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="preconnect" href="https://script.googleusercontent.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=1.0.0">
+  <script src="js/config.js?v=1.0.0" defer></script>
+  <script src="js/trs398.js?v=1.0.0" defer></script>
+  <script src="js/model.js?v=1.0.0" defer></script>
+  <script src="js/report.js?v=1.0.0" defer></script>
+  <script src="js/api.js?v=1.0.0" defer></script>
+  <script src="js/ui.js?v=1.0.0" defer></script>
+  <script src="js/app.js?v=1.0.0" defer></script>
+  <script src="js/page-dashboard.js?v=1.0.0" defer></script>
+  <script src="js/page-input.js?v=1.0.0" defer></script>
+  <script src="js/page-adjustment.js?v=1.0.0" defer></script>
+  <script src="js/page-riwayat.js?v=1.0.0" defer></script>
+  <script src="js/page-laporan.js?v=1.0.0" defer></script>
+  <script src="js/page-master.js?v=1.0.0" defer></script>
+  <script src="js/page-pengaturan.js?v=1.0.0" defer></script>
+</head>
+<body>
+  <!-- ================= LOGIN (W-01) ================= -->
+  <main id="login-screen" class="login-wrap">
+    <div class="login-bg" aria-hidden="true">
+      <svg viewBox="0 0 1280 800" preserveAspectRatio="none">
+        <defs><pattern id="lg-grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#CBD5E1" stroke-width="0.6" stroke-opacity="0.5"/></pattern></defs>
+        <rect width="1280" height="800" fill="url(#lg-grid)"/>
+        <path d="M0 620 Q 320 540 640 600 T 1280 560 L 1280 800 L 0 800 Z" fill="#E0F2FE" fill-opacity="0.6"/>
+        <path d="M0 690 Q 420 630 840 680 T 1280 650 L 1280 800 L 0 800 Z" fill="#D1FAE5" fill-opacity="0.45"/>
+      </svg>
+    </div>
+    <section class="login-card">
+      <header class="center" style="margin-bottom:24px">
+        <div class="login-emblem"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="13" y="4" width="6" height="24" rx="2" fill="#1B365D"/><rect x="4" y="13" width="24" height="6" rx="2" fill="#0072CE"/><circle cx="16" cy="16" r="3.5" fill="#2E9E5B"/></svg></div>
+        <h1 class="h-lg">e-Dose Agora</h1>
+        <p class="muted" style="margin:4px 0 0;font-size:13px">Linac Absolute Dosimetry QC System</p>
+      </header>
+      <form id="login-form" class="stack" novalidate>
+        <label class="field"><span>Admin Username</span>
+          <div class="inp-icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <input id="lg-user" type="text" autocomplete="username" placeholder="admin" value="admin" required style="height:44px"></div>
+        </label>
+        <label class="field"><span>Password</span>
+          <div class="inp-icon" style="position:relative"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input id="lg-pass" type="password" autocomplete="current-password" placeholder="Masukkan kata sandi" required style="height:44px;padding-right:40px">
+            <button type="button" class="pw-toggle" id="lg-eye" aria-label="Tampilkan atau sembunyikan password"><svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+        </label>
+        <div class="row-between">
+          <label class="check"><input type="checkbox" id="lg-remember" checked><span class="muted">Ingat perangkat ini (30 hari)</span></label>
+          <a href="#" id="lg-help" class="label">Butuh bantuan?</a>
+        </div>
+        <div id="lg-error" class="notice n-fail hidden" role="alert"></div>
+        <div id="lg-demo" class="notice n-info hidden"></div>
+        <button type="submit" id="lg-btn" class="btn btn-primary btn-block btn-lg">Masuk</button>
+      </form>
+    </section>
+    <footer class="login-foot">
+      <svg class="ic ic-sm" style="color:#2E9E5B" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+      <span>Internal Radiotherapy Physics Portal — IAEA TRS-398</span>
+    </footer>
+  </main>
+
+  <!-- ================= APP SHELL ================= -->
+  <div id="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div>
+        <div class="sb-brand">
+          <div class="brand-row">
+            <div class="brand-logo"><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="13" y="4" width="6" height="24" rx="2" fill="#1B365D"/><rect x="4" y="13" width="24" height="6" rx="2" fill="#0072CE"/><circle cx="16" cy="16" r="3.5" fill="#2E9E5B"/></svg></div>
+            <div><div class="brand-name">e-Dose Agora</div><div class="brand-sub">Radiotherapy QC</div></div>
+          </div>
+          <div class="modules">
+            <div class="on"><span><span class="dot"></span>Absolute QC</span><small class="mono">Active</small></div>
+            <div><span>Daily QC</span><small>Soon</small></div>
+            <div><span>Monthly Mech.</span><small>Soon</small></div>
+          </div>
+        </div>
+        <nav class="nav" id="nav" aria-label="Navigasi Utama"></nav>
+      </div>
+      <div class="sb-user">
+        <div class="row" style="gap:12px;min-width:0"><div class="avatar" id="sb-avatar">AD</div><div style="min-width:0"><div class="nm" id="sb-name">Admin</div><div class="rl">Fisikawan Medis</div></div></div>
+        <button type="button" id="btn-logout" aria-label="Keluar dari aplikasi" title="Keluar"><svg class="ic ic-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg></button>
+      </div>
+    </aside>
+    <div class="drawer-mask" id="drawer-mask"></div>
+    <div class="main">
+      <header class="topbar">
+        <div class="tb-left">
+          <button class="icon-btn tb-menu" id="btn-menu" aria-label="Buka menu navigasi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg></button>
+          <h1 id="page-title">Dashboard</h1>
+        </div>
+        <div class="tb-right">
+          <span id="sync-ind" class="sync"></span>
+          <span class="tb-actions" id="page-actions"></span>
+          <div style="position:relative">
+            <button class="icon-btn bell" id="btn-bell" aria-label="Notifikasi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="dot hidden" id="bell-dot"></span></button>
+            <div class="popover hidden" id="bell-pop"></div>
+          </div>
+        </div>
+      </header>
+      <main class="view" id="view"></main>
+    </div>
+    <nav class="bottom-nav" id="bottom-nav" aria-label="Navigasi bawah"></nav>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toasts" aria-live="polite"></div>
+  <div id="chart-tip"></div>
+</body>
+</html>
