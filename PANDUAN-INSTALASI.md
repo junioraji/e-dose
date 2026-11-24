@@ -139,6 +139,30 @@ Trigger `warmup` tiap 10 menit menjaga server Apps Script tetap "hangat" sehingg
 
 ---
 
+## Memperbarui ke versi baru (mis. v1.0 → v1.1)
+
+Data di Google Sheets **tidak perlu diubah dan setup TIDAK dijalankan ulang**.
+
+1. **Backend:** di editor Apps Script, ganti seluruh isi `Kode`, `Trs398Engine`, `AppModel`, `Laporan` dengan berkas versi baru → 💾 Simpan → **Terapkan → Kelola deployment → ✏️ → Versi: Versi baru → Terapkan**. Kolom baru (mis. `m_minus_list`, `m_v2_list` di v1.1) ditambahkan otomatis ke sheet pada panggilan pertama.
+2. **Frontend:** timpa isi folder repo dengan isi ZIP baru, **kecuali `js/config.js`** (simpan `GAS_URL` Anda), lalu:
+   ```bash
+   git add .
+   git commit -m "Update e-Dose Agora v1.1"
+   git push
+   ```
+   Versi file sudah dinaikkan (`?v=1.1.0`), jadi browser otomatis memuat versi baru.
+
+### Perubahan v1.1
+- Hapus permanen untuk personel, detektor, energi & pesawat yang **belum pernah dipakai** di pengukuran (yang sudah dipakai tetap hanya bisa dinonaktifkan agar riwayat & laporan utuh).
+- Judul menu menjadi **Master Pesawat Linac & Energi**.
+- Form edit tidak lagi tertutup saat di-scroll.
+- Input QC ditata ulang: pilih energi lewat chip (✓ = sudah diukur bulan ini), tombol Enter berpindah kolom.
+- k_pol: **M+ = rata-rata bacaan rutin**, **M− = rata-rata ulangan polaritas terbalik** (3–5 kali).
+- k_s: **M1 = rata-rata bacaan rutin (V1)**, **M2 = rata-rata ulangan pada V2** (3–5 kali).
+- Sidebar ringkas: seluruh menu terlihat tanpa scroll (layar ≥ 600 px tinggi).
+
+---
+
 ## Pemecahan masalah
 
 | Gejala | Penyebab & solusi |

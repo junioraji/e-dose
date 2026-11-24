@@ -66,13 +66,14 @@ var LocalBackend = (function () {
   function today() { return nowIso().slice(0, 10); }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function pick(src, fields) { var o = {}; fields.forEach(function (f) { if (src[f] !== undefined) o[f] = src[f]; }); return o; }
-  var MEAS = ['qc_datetime', 'fismed_id', 'temp_c', 'press_kpa', 'mu_set', 'm_raw_list', 'kpol_mode', 'k_pol', 'm_plus', 'm_minus', 'ks_mode', 'k_s', 'm_v1', 'm_v2', 'v1', 'v2', 'notes'];
+  var MEAS = ['qc_datetime', 'fismed_id', 'temp_c', 'press_kpa', 'mu_set', 'm_raw_list', 'kpol_mode', 'k_pol', 'm_plus', 'm_minus', 'm_minus_list', 'ks_mode', 'k_s', 'm_v1', 'm_v2', 'm_v2_list', 'v1', 'v2', 'notes'];
   var ADJ = ['adj_datetime', 'adj_category', 'adj_action_desc', 'adj_performer', 'adj_ticket'];
   var ENT_ID = { personnel: ['person_id', 'P', 3], energies: ['energy_id', 'E', 2], detectors: ['detector_id', 'D', 2], kq: ['kq_id', 'KQ', 3] };
   var REQ = {
     personnel: ['full_name', 'role'], energies: ['linac_name', 'beam_type', 'energy_label', 'setup_type', 'z_ref_cm', 'quality_index', 'baseline_cgy_mu'],
     detectors: ['category', 'model_name', 'serial_no', 'cal_factor', 'expiry_date'], kq: ['chamber_model', 'beam_type', 'quality_index_val', 'kq_value']
   };
+  function cleanLists(r) { ['m_raw_list', 'm_minus_list', 'm_v2_list'].forEach(function (k) { if (r[k] !== undefined) r[k] = cleanReadings(r[k]); }); return r; }
   function cleanReadings(l) { return (l || []).map(Number).filter(function (x) { return isFinite(x) && x !== 0; }).slice(0, 10); }
   function fail(m) { return { success: false, message: m }; }
 
@@ -105,7 +106,7 @@ var LocalBackend = (function () {
         rec.energy_id = src.energy_id; rec.chamber_id = src.chamber_id; rec.electrometer_id = src.electrometer_id;
         if (!AppModel.idx(db.energies, 'energy_id')[rec.energy_id]) return fail('Energi berkas tidak ditemukan.');
         if (!rec.fismed_id) return fail('Pilih Fisikawan Medis pelaksana.');
-        rec.m_raw_list = cleanReadings(rec.m_raw_list);
+        cleanLists(rec);
         var bad = checkInstruments(rec, db); if (bad) return fail(bad);
         var rc = AppModel.recompute(rec, db);
         if (!rc.result.valid) return fail(rc.result.errors.join(' '));
@@ -122,7 +123,7 @@ var LocalBackend = (function () {
         var old = db.transactions.filter(function (t) { return t.qc_id === s2.qc_id; })[0];
         if (!old) return fail('Data tidak ditemukan.');
         var r2 = clone(old), upd = pick(s2, MEAS.concat(old.record_type === 'ADJUSTMENT' ? ADJ : [])), ch = [];
-        if (upd.m_raw_list) upd.m_raw_list = cleanReadings(upd.m_raw_list);
+        cleanLists(upd);
         Object.keys(upd).forEach(function (k) { if (JSON.stringify(upd[k]) !== JSON.stringify(old[k])) { ch.push({ f: k, o: old[k], n: upd[k] }); r2[k] = upd[k]; } });
         if (!ch.length) return { success: true, unchanged: true, record: old, changes: {} };
         var b2 = checkInstruments(r2, db); if (b2) return fail(b2);
@@ -143,7 +144,7 @@ var LocalBackend = (function () {
         if (!String(s3.adj_performer || '').trim()) return fail('Nama pelaksana perbaikan wajib diisi.');
         var af = sum.asFound, r3 = pick(s3, MEAS.concat(ADJ));
         r3.energy_id = af.energy_id; r3.chamber_id = af.chamber_id; r3.electrometer_id = af.electrometer_id; r3.fismed_id = r3.fismed_id || af.fismed_id;
-        r3.m_raw_list = cleanReadings(r3.m_raw_list);
+        cleanLists(r3);
         var b3 = checkInstruments(r3, db); if (b3) return fail(b3);
         var rc3 = AppModel.recompute(r3, db, af);
         if (!rc3.result.valid) return fail(rc3.result.errors.join(' '));
@@ -175,6 +176,13 @@ var LocalBackend = (function () {
         rw = clone(rw); rw.is_active = d.active === true;
         var c2 = {}; c2[e2] = [rw];
         return { success: true, changes: c2 };
+      }
+      case 'hardDelete': {
+        var used = AppModel.usage(db, d.entity, d.id);
+        if (used) return fail('Tidak bisa dihapus: sudah dipakai di ' + used + ' data/pengaturan. Gunakan Nonaktifkan agar riwayat tetap utuh.');
+        if (d.entity === 'linac') return { success: true, changes: {}, removed: { energies: db.energies.filter(function (e) { return e.linac_id === d.id; }).map(function (e) { return e.energy_id; }) } };
+        var rm = {}; rm[d.entity] = [d.id];
+        return { success: true, changes: {}, removed: rm };
       }
       case 'saveKqBulk': {
         var model = String(d.chamber_model || '').trim(), bt = String(d.beam_type || '').toUpperCase();
@@ -211,7 +219,7 @@ var LocalBackend = (function () {
  * API — panggilan ke GAS + antrean simpan optimistis
  * ===================================================================== */
 var Api = (function () {
-  var OPTIMISTIC = { saveQC: 1, updateQC: 1, saveAdjustment: 1, saveMaster: 1, deleteMaster: 1, saveKqBulk: 1, renameLinac: 1, saveConfig: 1 };
+  var OPTIMISTIC = { hardDelete: 1, saveQC: 1, updateQC: 1, saveAdjustment: 1, saveMaster: 1, deleteMaster: 1, saveKqBulk: 1, renameLinac: 1, saveConfig: 1 };
   var queue = [], running = false, tempMap = {}, pendingFullSync = false, wake = null;
   function isDemo() { return !window.APP_CONFIG || !APP_CONFIG.GAS_URL || /XXXX/.test(APP_CONFIG.GAS_URL); }
 

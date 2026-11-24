@@ -1,5 +1,5 @@
 /* =====================================================================
- * W-07 · Master Pesawat Linac & Fisika Berkas
+ * W-07 · Master Pesawat Linac & Energi
  * W-08 · Master Detektor, Kalibrasi & Tabel kQ TRS-398
  * ===================================================================== */
 /* Modal form generik — fields: [{name,label,type,options,step,req,hint,span,ph}] */
@@ -110,7 +110,8 @@ window.FormModal = function (o) {
       return '<article class="card linac-card ' + (l.linac_id === sel ? 'on' : '') + (l.is_active ? '' : ' row-off') + '" data-sel="' + esc(l.linac_id) + '"><div class="row-between" style="align-items:flex-start"><div><h2 class="h-sm">' + esc(l.linac_name) + '</h2><p class="mono small muted" style="margin:0">' + esc(l.serial_no) + ' · ' + esc(l.bunker) + '</p></div>' +
         (l.is_active ? '<span class="badge ' + (l.linac_id === sel ? 'b-info' : 'b-muted') + ' b-sm">' + act.length + ' Energi</span>' : '<span class="badge b-muted b-sm">Nonaktif</span>') + '</div>' +
         '<p class="small muted" style="margin:6px 0 0">' + act.map(function (e) { return esc(e.energy_label); }).join(', ') + '</p>' +
-        (l.linac_id === sel ? '<div class="row mt" style="justify-content:flex-end;border-top:1px solid var(--info-surface-border);padding-top:8px"><button class="btn-text label" data-edit-linac>Edit</button><button class="btn-text label" data-toggle-linac style="color:' + (l.is_active ? 'var(--fail-accent)' : 'var(--pass-text)') + '">' + (l.is_active ? 'Nonaktifkan' : 'Aktifkan') + '</button></div>' : '') + '</article>';
+        (l.linac_id === sel ? '<div class="row mt" style="justify-content:flex-end;border-top:1px solid var(--info-surface-border);padding-top:8px"><button class="btn-text label" data-edit-linac>Edit</button><button class="btn-text label" data-toggle-linac style="color:' + (l.is_active ? 'var(--warning-text)' : 'var(--pass-text)') + '">' + (l.is_active ? 'Nonaktifkan' : 'Aktifkan') + '</button>' +
+        (AppModel.usage(Store.data, 'linac', l.linac_id) ? '<span class="small muted" title="Sudah ada data QC — hanya bisa dinonaktifkan">Tidak bisa dihapus</span>' : '<button class="btn-text label" data-del-linac style="color:var(--fail-accent)">Hapus</button>') + '</div>' : '') + '</article>';
     }).join('') + '</section>';
   }
 
@@ -124,12 +125,13 @@ window.FormModal = function (o) {
             '<td style="font-weight:700;color:var(--primary)">' + esc(e.energy_label) + (e.is_active ? '' : ' <span class="small muted">(nonaktif)</span>') + '</td><td class="mono">' + esc(e.setup_type) + ' ' + UI.f(e.ssd_sad_cm, 0) + '</td>' +
             '<td class="r mono">' + UI.f(e.baseline_cgy_mu, 3) + '</td><td class="r mono">' + (e.beam_type === 'ELECTRON' ? UI.f(e.quality_index, 2) + ' cm' : UI.f(e.quality_index, 3)) + '</td>' +
             '<td class="r mono">' + (e.setup_type === 'SAD' ? UI.f(e.tmr_zref, 4) : UI.f(e.pdd_zref, 2) + '%') + '</td><td class="r mono">' + UI.f(e.z_ref_cm, 2) + '</td><td class="r mono small">' + UI.f(e.kpol_default, 4) + ' · ' + UI.f(e.ks_default, 4) + '</td>' +
-            '<td class="r"><span class="acts"><button class="icon-btn" data-edit-e="' + esc(e.energy_id) + '" aria-label="Edit">' + UI.icon('pen') + '</button><button class="icon-btn ' + (e.is_active ? 'danger' : '') + '" data-toggle-e="' + esc(e.energy_id) + '" aria-label="' + (e.is_active ? 'Nonaktifkan' : 'Aktifkan') + '" title="' + (e.is_active ? 'Nonaktifkan' : 'Aktifkan') + '">' + UI.icon('power') + '</button></span></td></tr>';
+            '<td class="r"><span class="acts"><button class="icon-btn" data-edit-e="' + esc(e.energy_id) + '" aria-label="Edit">' + UI.icon('pen') + '</button><button class="icon-btn" data-toggle-e="' + esc(e.energy_id) + '" aria-label="' + (e.is_active ? 'Nonaktifkan' : 'Aktifkan') + '" title="' + (e.is_active ? 'Nonaktifkan' : 'Aktifkan') + '">' + UI.icon('power') + '</button>' +
+            UI.delBtn('data-del-e="' + esc(e.energy_id) + '"', AppModel.usage(Store.data, 'energies', e.energy_id)) + '</span></td></tr>';
         }).join('') + '</tbody></table></div>' : '<div class="empty">Belum ada energi.</div>') + '</section>';
   }
 
   Pages.linac = {
-    title: 'Master Pesawat Linac & Fisika Berkas', live: true,
+    title: 'Master Pesawat Linac & Energi', live: true,
     actions: function () { return '<button class="btn btn-primary" id="add-linac">' + UI.icon('plus') + 'Tambah Pesawat Linac</button>'; },
     render: function () {
       var L = Data.linacs(true);
@@ -143,7 +145,7 @@ window.FormModal = function (o) {
       document.getElementById('add-linac').onclick = function () {
         FormModal({
           title: 'Tambah Pesawat Linac', size: 'lg', row: { beam_type: 'PHOTON', setup_type: 'SSD' }, fields: LINAC_FIELDS.concat([{ section: 'Energi pertama' }]).concat(ENERGY_FIELDS), onMount: energyMount,
-          onSave: function (d) { d.is_active = true; return Api.mutate('saveMaster', { entity: 'energies', row: d }).then(function (r) { if (r.success) sel = r.row.linac_id; return r; }); }, okToast: 'Pesawat Linac ditambahkan.'
+          onSave: function (d) { d.is_active = true; return Api.mutate('saveMaster', { entity: 'energies', row: d }).then(function (r) { if (r.success) { sel = r.row.linac_id; setTimeout(function () { App.render({ keepScroll: true }); }, 0); } return r; }); }, okToast: 'Pesawat Linac ditambahkan.'
         });
       };
       if (!l) return;
@@ -161,6 +163,9 @@ window.FormModal = function (o) {
       if (ed) ed.onclick = function () {
         FormModal({ title: 'Edit Pesawat Linac', row: l, fields: LINAC_FIELDS, onSave: function (d) { return Api.mutate('renameLinac', { linac_id: l.linac_id, linac_name: d.linac_name, linac_model: d.linac_model, serial_no: d.serial_no, bunker: d.bunker }); }, okToast: 'Data pesawat diperbarui.' });
       };
+      el.querySelectorAll('[data-del-e]').forEach(function (b) { b.onclick = function () { var e = Data.E()[b.dataset.delE]; UI.hardDelete('energies', e.energy_id, 'energi ' + e.energy_label + ' (' + e.linac_name + ')'); }; });
+      var dl = el.querySelector('[data-del-linac]');
+      if (dl) dl.onclick = function () { UI.hardDelete('linac', l.linac_id, 'pesawat ' + l.linac_name + ' beserta ' + l.energies.length + ' energinya'); };
       var tg = el.querySelector('[data-toggle-linac]');
       if (tg) tg.onclick = async function () {
         if (l.is_active && !(await UI.confirm({ title: 'Nonaktifkan ' + l.linac_name + '?', body: '<p>Seluruh energi pesawat ini akan dinonaktifkan. Riwayat tetap tersimpan.</p>', ok: 'Nonaktifkan', danger: true }))) return;
@@ -219,7 +224,8 @@ window.FormModal = function (o) {
           '<td class="r mono" style="font-weight:600">' + (d.category === 'CHAMBER' ? UI.f(d.cal_factor, 3) + ' ' + esc(d.unit) : 'k_elec = ' + UI.f(d.cal_factor, 4)) + '</td>' +
           '<td style="font-size:13px">' + esc(d.cal_lab) + ' · <span class="mono">' + esc(d.cert_no) + '</span></td><td class="mono small">' + UI.date(d.cal_date) + '</td>' +
           '<td class="mono small ' + (st === 'EXPIRING' ? 't-warning' : st === 'EXPIRED' ? 't-fail' : '') + '" style="font-weight:600">' + UI.date(d.expiry_date) + '</td><td>' + b + '</td>' +
-          '<td class="r"><span class="acts"><button class="icon-btn" data-edit-d="' + esc(d.detector_id) + '" aria-label="Edit">' + UI.icon('pen') + '</button><button class="icon-btn ' + (d.is_active ? 'danger' : '') + '" data-toggle-d="' + esc(d.detector_id) + '" aria-label="' + (d.is_active ? 'Nonaktifkan' : 'Aktifkan') + '" title="' + (d.is_active ? 'Nonaktifkan' : 'Aktifkan') + '">' + UI.icon('power') + '</button></span></td></tr>';
+          '<td class="r"><span class="acts"><button class="icon-btn" data-edit-d="' + esc(d.detector_id) + '" aria-label="Edit">' + UI.icon('pen') + '</button><button class="icon-btn" data-toggle-d="' + esc(d.detector_id) + '" aria-label="' + (d.is_active ? 'Nonaktifkan' : 'Aktifkan') + '" title="' + (d.is_active ? 'Nonaktifkan' : 'Aktifkan') + '">' + UI.icon('power') + '</button>' +
+          UI.delBtn('data-del-d="' + esc(d.detector_id) + '"', AppModel.usage(Store.data, 'detectors', d.detector_id)) + '</span></td></tr>';
       }).join('') : '<tr><td colspan="8" class="empty">Tidak ada alat ukur.</td></tr>') + '</tbody></table></div></section></div>';
   }
 
@@ -306,6 +312,7 @@ window.FormModal = function (o) {
         q('#d-st').onchange = function () { T.status = this.value; App.render({ keepScroll: true }); };
         q('#d-add').onclick = function () { detModal(); };
         el.querySelectorAll('[data-edit-d]').forEach(function (b) { b.onclick = function () { detModal(Data.DET()[b.dataset.editD]); }; });
+        el.querySelectorAll('[data-del-d]').forEach(function (b) { b.onclick = function () { var d = Data.DET()[b.dataset.delD]; UI.hardDelete('detectors', d.detector_id, d.model_name + ' #' + d.serial_no); }; });
         el.querySelectorAll('[data-toggle-d]').forEach(function (b) {
           b.onclick = async function () {
             var d = Data.DET()[b.dataset.toggleD];

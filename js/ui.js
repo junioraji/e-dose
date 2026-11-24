@@ -102,7 +102,10 @@ var UI = (function () {
     }
     function onKey(e) { if (e.key === 'Escape') close(); }
     document.addEventListener('keydown', onKey);
-    wrap.addEventListener('mousedown', function (e) { if (e.target === wrap) close(); });
+    /* tutup hanya bila klik penuh (tekan & lepas) di area gelap — bukan saat scroll/drag scrollbar */
+    var downOnMask = false;
+    wrap.addEventListener('pointerdown', function (e) { downOnMask = e.target === wrap; });
+    wrap.addEventListener('click', function (e) { if (downOnMask && e.target === wrap) close(); downOnMask = false; });
     wrap.querySelectorAll('[data-close]').forEach(function (b) { b.onclick = close; });
     var el = wrap.querySelector('.modal');
     if (o.onMount) o.onMount(el, close);
@@ -202,7 +205,19 @@ var UI = (function () {
     });
   }
 
-  return { esc: esc, icon: icon, LOGO: LOGO, f: f, dev: dev, date: date, badge: badge, devClass: devClass, toast: toast, modal: modal,
+  /* Tombol hapus permanen: aktif hanya bila belum pernah dipakai di transaksi */
+  function delBtn(attr, used) {
+    return '<button class="icon-btn danger" ' + attr + (used ? ' disabled title="Sudah dipakai di ' + used + ' data — tidak bisa dihapus, gunakan Nonaktifkan"' : ' title="Hapus permanen (belum pernah dipakai)"') + ' aria-label="Hapus">' + icon('trash') + '</button>';
+  }
+  async function hardDelete(entity, id, label) {
+    var ok = await confirm({ title: 'Hapus permanen ' + label + '?', body: '<p>Data ini belum pernah dipakai di pengukuran, sehingga aman dihapus. Tindakan ini <b>tidak bisa dibatalkan</b>.</p>', ok: 'Hapus Permanen', danger: true });
+    if (!ok) return;
+    var r = await Api.mutate('hardDelete', { entity: entity, id: id });
+    if (!r.success) return toast(esc(r.message), 'error');
+    toast(esc(label) + ' dihapus.', 'success');
+  }
+
+  return { delBtn: delBtn, hardDelete: hardDelete, esc: esc, icon: icon, LOGO: LOGO, f: f, dev: dev, date: date, badge: badge, devClass: devClass, toast: toast, modal: modal,
     confirm: confirm, busy: busy, downloadBase64: downloadBase64, svgToPng: svgToPng, debounce: debounce, options: options,
     formData: formData, nowLocalInput: nowLocalInput, bindChartTips: bindChartTips };
 })();

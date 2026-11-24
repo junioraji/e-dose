@@ -101,8 +101,8 @@
       '<label class="field"><span>Fismed Pengukur</span><select name="fismed_id">' + UI.options(Data.fismeds(), 'person_id', function (p) { return p.full_name; }, S.fismed_id) + '</select></label></div>' +
       '<div class="g g-3 g-gap-sm">' + MeasUI.envFields(S, { tLabel: 'Suhu T Baru (°C)', pLabel: 'Tekanan P Baru', noMu: true }) + '<div class="field"><span style="color:var(--info-text)">k_TP Baru</span><div class="calc-out" id="ktp-out">' + UI.f(r.ktp, 4) + '</div></div>' +
       '<label class="field"><span>MU</span><input name="mu_set" type="number" value="' + esc(S.mu_set) + '"></label></div>' +
-      MeasUI.readingsBlock(S, 'M') +
-      '<details class="mt"><summary class="label" style="cursor:pointer;color:var(--secondary)">Faktor k_pol & k_s (default: nilai As-Found)</summary><div class="mt">' + MeasUI.factorsBlock(S) + '</div></details>' +
+      '<div class="sub-lbl">Bacaan ulang rutin</div>' + MeasUI.readingsBlock(S) +
+      '<details class="mt"' + (S.kpol_mode === 'measured' || S.ks_mode === 'measured' ? ' open' : '') + '><summary class="label" style="cursor:pointer;color:var(--secondary)">Faktor k_pol &amp; k_s (default: nilai As-Found)</summary><div class="mt">' + MeasUI.factorsBlock(S) + '</div></details>' +
       '<label class="field"><span>Catatan</span><textarea name="notes" rows="2" placeholder="Opsional">' + esc(S.notes) + '</textarea></label></div>' +
       '<div class="stack-sm" id="adj-result">' + resultCard(r.valid ? r.status : '', r.deviation, r.output, lim) + instr.map(function (i) { return '<div class="notice n-' + i.t + '">' + UI.icon('alert') + '<div>' + esc(i.m) + '</div></div>'; }).join('') +
       ((S.readings || []).some(function (x) { return x !== ''; }) ? MeasUI.issues(r) : '') + '</div></div></section>' +
@@ -137,7 +137,7 @@
 
   function live(s) {
     var rc = compute(s), r = rc.result;
-    MeasUI.updateLiveBits(root, r);
+    MeasUI.updateLiveBits(root, r, S);
     var D = Data.DET(), instr = MeasUI.instrumentIssues(D[s.asFound.chamber_id], D[s.asFound.electrometer_id], S.qc_datetime);
     root.querySelector('#adj-result').innerHTML = resultCard(r.valid ? r.status : '', r.deviation, r.output, { warn: r.warn, action: r.action }) +
       instr.map(function (i) { return '<div class="notice n-' + i.t + '">' + UI.icon('alert') + '<div>' + esc(i.m) + '</div></div>'; }).join('') + ((S.readings || []).some(function (x) { return x !== ''; }) ? MeasUI.issues(r) : '');
@@ -206,7 +206,7 @@
       if (nw) {
         MeasUI.bind(nw, S, function () { live(s); }, function (focus) { App.render({ keepScroll: true }); if (focus) { var f = root.querySelector('[name="' + focus + '"]'); if (f) f.focus(); } });
         nw.querySelectorAll('select').forEach(function (sel) { sel.addEventListener('change', function () { S[sel.name] = sel.value; live(s); }); });
-        MeasUI.updateLiveBits(el, compute(s).result);
+        MeasUI.updateLiveBits(el, compute(s).result, S);
       }
       bindBar(s);
     },

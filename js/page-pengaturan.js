@@ -52,11 +52,12 @@
   function pPer() {
     var list = Store.data.personnel.slice().sort(function (a, b) { return (b.is_active - a.is_active) || a.role.localeCompare(b.role) || a.full_name.localeCompare(b.full_name); });
     return '<section class="card card-flush"><div class="card-hd"><h2 class="h-sm">Direktori Fisikawan Medis &amp; Kepala Departemen</h2><button class="btn btn-primary btn-sm" id="p-add">' + UI.icon('plus') + 'Tambah Personel</button></div>' +
-      '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nama</th><th>Peran</th><th>NIP / STR</th><th class="hide-sm">Email</th><th>Status</th><th class="r">Aksi</th></tr></thead><tbody>' +
+      '<p class="small muted" style="margin:0;padding:10px 20px 0">Ikon ' + UI.icon('trash', 'ic-xs') + ' menghapus permanen personel yang belum pernah tercatat di pengukuran. Yang sudah tercatat hanya bisa dinonaktifkan agar laporan lama tetap utuh.</p><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nama</th><th>Peran</th><th>NIP / STR</th><th class="hide-sm">Email</th><th>Status</th><th class="r">Aksi</th></tr></thead><tbody>' +
       list.map(function (p) {
         return '<tr class="' + (p.is_active ? '' : 'row-off') + '"><td><div class="t1">' + esc(p.full_name) + '</div><div class="t2">' + esc(p.position || '') + '</div></td><td>' + (p.role === 'KADEP' ? '<span class="badge b-navy b-sm">KADEP</span>' : '<span class="badge b-info b-sm">FISMED</span>') + '</td>' +
           '<td class="mono small">' + esc(p.nip_str) + '</td><td class="hide-sm small">' + esc(p.email) + '</td><td>' + (p.is_active ? '<span class="badge b-pass b-sm">Aktif</span>' : '<span class="badge b-muted b-sm">Nonaktif</span>') + '</td>' +
-          '<td class="r"><span class="acts"><button class="icon-btn" data-edit-p="' + esc(p.person_id) + '" aria-label="Edit">' + UI.icon('pen') + '</button><button class="icon-btn ' + (p.is_active ? 'danger' : '') + '" data-toggle-p="' + esc(p.person_id) + '" title="' + (p.is_active ? 'Nonaktifkan' : 'Aktifkan') + '" aria-label="' + (p.is_active ? 'Nonaktifkan' : 'Aktifkan') + '">' + UI.icon('power') + '</button></span></td></tr>';
+          '<td class="r"><span class="acts"><button class="icon-btn" data-edit-p="' + esc(p.person_id) + '" aria-label="Edit">' + UI.icon('pen') + '</button><button class="icon-btn" data-toggle-p="' + esc(p.person_id) + '" title="' + (p.is_active ? 'Nonaktifkan' : 'Aktifkan') + '" aria-label="' + (p.is_active ? 'Nonaktifkan' : 'Aktifkan') + '">' + UI.icon('power') + '</button>' +
+          UI.delBtn('data-del-p="' + esc(p.person_id) + '"', AppModel.usage(Store.data, 'personnel', p.person_id)) + '</span></td></tr>';
       }).join('') + '</tbody></table></div></section>';
   }
 
@@ -145,6 +146,7 @@
     }
     el.querySelector('#p-add').onclick = function () { modal(); };
     el.querySelectorAll('[data-edit-p]').forEach(function (b) { b.onclick = function () { modal(Data.PER()[b.dataset.editP]); }; });
+    el.querySelectorAll('[data-del-p]').forEach(function (b) { b.onclick = function () { var p = Data.PER()[b.dataset.delP]; UI.hardDelete('personnel', p.person_id, p.full_name); }; });
     el.querySelectorAll('[data-toggle-p]').forEach(function (b) {
       b.onclick = async function () {
         var p = Data.PER()[b.dataset.toggleP];

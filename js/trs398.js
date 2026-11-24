@@ -173,13 +173,13 @@ var TRS398 = (function () {
 
     if (inp.kpolMode === 'measured') {
       r.kpol = kPol(inp.mPlus, inp.mMinus, inp.polRoutine);
-      if (!ok(r.kpol)) e.push('Isi bacaan M+ dan M− untuk menghitung k_pol.');
+      if (!ok(r.kpol)) e.push('Isi bacaan ulangan polaritas terbalik (M−) untuk menghitung k_pol.');
     } else r.kpol = ok(num(inp.kpol)) ? num(inp.kpol) : 1;
     if (ok(r.kpol) && Math.abs(r.kpol - 1) > 0.03) w.push('k_pol menyimpang >3% dari 1 — periksa detektor.');
 
     if (inp.ksMode === 'measured') {
       r.ks = kS(inp.mV1, inp.mV2, inp.v1, inp.v2);
-      if (!ok(r.ks)) e.push('k_s tidak dapat dihitung: isi M1, M2 dan rasio V1/V2 harus 2.0–5.0.');
+      if (!ok(r.ks)) e.push('k_s belum dapat dihitung: isi bacaan ulangan pada V2 (M2); rasio V1/V2 harus 2.0–5.0.');
     } else r.ks = ok(num(inp.ks)) ? num(inp.ks) : 1;
     if (ok(r.ks) && (r.ks < 1 || r.ks > 1.05)) w.push('k_s di luar kisaran 1.000–1.050.');
 

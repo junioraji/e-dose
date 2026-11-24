@@ -19,7 +19,7 @@ var AppModel = (function () {
     Ref_kQ_TRS398: { key: 'kq_id', cols: [['kq_id', 's'], ['chamber_model', 's'], ['beam_type', 's'], ['quality_index_val', 'n'], ['kq_value', 'n'], ['source', 's']] },
     Trans_QC_Absolut: { key: 'qc_id', cols: [['qc_id', 's'], ['session_group_id', 's'], ['record_type', 's'], ['iteration_no', 'n'], ['qc_datetime', 's'],
       ['energy_id', 's'], ['chamber_id', 's'], ['electrometer_id', 's'], ['fismed_id', 's'], ['temp_c', 'n'], ['press_kpa', 'n'], ['mu_set', 'n'],
-      ['m_raw_list', 'j'], ['m_raw_avg', 'n'], ['kpol_mode', 's'], ['m_plus', 'n'], ['m_minus', 'n'], ['ks_mode', 's'], ['m_v1', 'n'], ['m_v2', 'n'], ['v1', 'n'], ['v2', 'n'],
+      ['m_raw_list', 'j'], ['m_raw_avg', 'n'], ['kpol_mode', 's'], ['m_plus', 'n'], ['m_minus', 'n'], ['ks_mode', 's'], ['m_v1', 'n'], ['m_v2', 'n'], ['v1', 'n'], ['v2', 'n'], ['m_minus_list', 'j'], ['m_v2_list', 'j'],
       ['k_tp', 'n'], ['k_pol', 'n'], ['k_s', 'n'], ['k_elec', 'n'], ['n_dw', 'n'], ['k_q', 'n'], ['quality_index', 'n'], ['setup_type', 's'], ['pdd_used', 'n'], ['tmr_used', 'n'],
       ['baseline_used', 'n'], ['m_q', 'n'], ['dw_zref', 'n'], ['dw_zmax', 'n'], ['output_cgy_mu', 'n'], ['deviation_pct', 'n'], ['status', 's'],
       ['warning_limit_used', 'n'], ['action_limit_used', 'n'], ['adj_datetime', 's'], ['adj_category', 's'], ['adj_action_desc', 's'], ['adj_performer', 's'], ['adj_ticket', 's'],
@@ -44,6 +44,12 @@ var AppModel = (function () {
   }
   function idx(list, key) { var m = {}; (list || []).forEach(function (x) { m[x[key]] = x; }); return m; }
 
+  /* Rata-rata daftar bacaan (nilai absolut bila abs), atau nilai tunggal lama sebagai cadangan */
+  function avgOr(list, single, abs) {
+    var xs = (list || []).map(TRS398.num).filter(TRS398.ok).map(function (x) { return abs ? Math.abs(x) : x; });
+    return xs.length ? TRS398.mean(xs) : single;
+  }
+
   /* Rakit input TRS398.compute dari record transaksi + master data.
    * snap (opsional) = record sumber snapshot (As-Found untuk Adjustment,
    * record lama untuk koreksi). Nilai N_D,w, k_Q, k_elec, PDD/TMR, baseline
@@ -61,9 +67,11 @@ var AppModel = (function () {
       kelec: el.cal_factor, ndw: ch.cal_factor, ndwUnit: ch.unit,
       kqRows: db.kq, chamberModel: ch.model_name, beamType: en.beam_type, qualityIndex: en.quality_index,
       kpolMode: rec.kpol_mode || 'stored', kpol: rec.kpol_mode === 'measured' ? '' : (ok(n(rec.k_pol)) ? rec.k_pol : en.kpol_default),
-      mPlus: rec.m_plus, mMinus: rec.m_minus, polRoutine: '+',
+      /* k_pol: M+ = rata-rata bacaan rutin (polaritas normal), M− = rata-rata ulangan polaritas terbalik
+       * k_s  : M1 = rata-rata bacaan rutin (tegangan normal V1), M2 = rata-rata ulangan pada V2 */
+      mPlus: avgOr(rec.m_raw_list, rec.m_plus), mMinus: avgOr(rec.m_minus_list, rec.m_minus, true), polRoutine: '+',
       ksMode: rec.ks_mode || 'stored', ks: rec.ks_mode === 'measured' ? '' : (ok(n(rec.k_s)) ? rec.k_s : en.ks_default),
-      mV1: rec.m_v1, mV2: rec.m_v2, v1: rec.v1, v2: rec.v2,
+      mV1: avgOr(rec.m_raw_list, rec.m_v1), mV2: avgOr(rec.m_v2_list, rec.m_v2), v1: rec.v1, v2: rec.v2,
       setup: en.setup_type, pdd: en.pdd_zref, tmr: en.tmr_zref, baseline: en.baseline_cgy_mu,
       warn: lim.warn, action: lim.action, snapshot: false
     };
@@ -84,7 +92,9 @@ var AppModel = (function () {
 
   /* Terapkan hasil compute ke record (kolom turunan + snapshot parameter) */
   function applyResult(rec, r, inp) {
-    rec.m_raw_avg = r.mAvg; rec.k_tp = r.ktp; rec.k_pol = r.kpol; rec.k_s = r.ks; rec.k_elec = r.kelec;
+    rec.m_raw_avg = r.mAvg; rec.k_tp = r.ktp;
+    if (inp.kpolMode === 'measured') { rec.m_plus = TRS398.num(inp.mPlus); rec.m_minus = TRS398.num(inp.mMinus); }
+    if (inp.ksMode === 'measured') { rec.m_v1 = TRS398.num(inp.mV1); rec.m_v2 = TRS398.num(inp.mV2); } rec.k_pol = r.kpol; rec.k_s = r.ks; rec.k_elec = r.kelec;
     rec.n_dw = r.ndw; rec.k_q = r.kq; rec.quality_index = TRS398.num(inp.qualityIndex); rec.setup_type = inp.setup;
     rec.pdd_used = TRS398.ok(TRS398.num(inp.pdd)) ? TRS398.num(inp.pdd) : ''; rec.tmr_used = TRS398.ok(TRS398.num(inp.tmr)) ? TRS398.num(inp.tmr) : '';
     rec.baseline_used = TRS398.num(inp.baseline);
@@ -111,6 +121,19 @@ var AppModel = (function () {
       s.energy_id = (s.asFound || g[k][0] || {}).energy_id;
       return s;
     }).sort(function (a, b) { return a.datetime < b.datetime ? 1 : -1; });
+  }
+
+  /* Berapa kali master dipakai di transaksi (0 = boleh dihapus permanen) */
+  function usage(db, entity, id) {
+    var tx = db.transactions || [];
+    if (entity === 'personnel') return tx.filter(function (t) { return t.fismed_id === id; }).length + (db.config && db.config.KADEP_ID === id ? 1 : 0);
+    if (entity === 'detectors') return tx.filter(function (t) { return t.chamber_id === id || t.electrometer_id === id; }).length;
+    if (entity === 'energies') return tx.filter(function (t) { return t.energy_id === id; }).length;
+    if (entity === 'linac') {
+      var ids = (db.energies || []).filter(function (e) { return e.linac_id === id; }).map(function (e) { return e.energy_id; });
+      return tx.filter(function (t) { return ids.indexOf(t.energy_id) >= 0; }).length;
+    }
+    return 0;
   }
 
   /* Status kalibrasi detektor */
@@ -239,6 +262,6 @@ var AppModel = (function () {
     return { config: config, personnel: personnel, energies: energies, detectors: detectors, kq: kq, transactions: transactions, notifications: [] };
   }
 
-  return { energyOrder: energyOrder, SCHEMA: SCHEMA, DEFAULT_CONFIG: DEFAULT_CONFIG, idx: idx, buildInput: buildInput, applyResult: applyResult,
+  return { usage: usage, avgOr: avgOr, energyOrder: energyOrder, SCHEMA: SCHEMA, DEFAULT_CONFIG: DEFAULT_CONFIG, idx: idx, buildInput: buildInput, applyResult: applyResult,
     recompute: recompute, groupSessions: groupSessions, calStatus: calStatus, buildSeed: buildSeed };
 })();
